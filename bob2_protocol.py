@@ -10,7 +10,7 @@ class Bob2Protocol:
         self.version_major = version_major
         self.version_minor = version_minor
 
-    def qbuild_message(self, message_type, dest_ipv6, dest_port, message_content, multiple_packets=False, packet_num=0):
+    def build_message(self, message_type, dest_ipv6, dest_port, message_content, multiple_packets=False, packet_num=0):
         try:
             dest_ip_bytes = socket.inet_pton(socket.AF_INET6, dest_ipv6)
         except socket.error:

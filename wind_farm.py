@@ -2,10 +2,11 @@ from bob2_protocol import Bob2Protocol
 import time
 import random
 import socket
+import csv
 
 
 class WindTurbineNode:
-    def __init__(self, listen_ip, listen_port,sat_ip, sat_port):
+    def __init__(self, listen_ip, listen_port, sat_ip, sat_port):
         self.protocol = Bob2Protocol()
 
         self.sat_host = sat_ip
@@ -14,6 +15,17 @@ class WindTurbineNode:
         self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
         self.sock.bind((listen_ip, listen_port))
+        self.satellites = self.load_satellites()
+
+    def load_satellites(self):
+        satellites = []
+        with open('/home/veksor/Documents/SC/Project 3/cs7ns1-project3/distances_common.csv', 'r') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if row['Device1'] == 'Offshore Windfarm':
+                    satellites.append((float(row['Distance_km']), row['IP2'], int(row['Port2'])))
+        satellites.sort()
+        return satellites
 
     def generate_turbine_data(self):
         """Simulate wind turbine sensor data"""
@@ -32,19 +44,21 @@ class WindTurbineNode:
         turbine_data = self.generate_turbine_data()
         message_content = str(turbine_data)
 
-        try:
-            # Message type 0 for normal status update
-            message = self.protocol.build_message(
-                message_type=0,
-                dest_ipv6=self.sat_host,
-                dest_port=self.sat_port,
-                message_content=message_content
-            )
-            self.sock.sendto(message, (self.sat_host, self.sat_port))
-            return message
-        except ValueError as e:
-            print(f"Error building message: {e}")
-            return None
+        for distance, sat_ip, sat_port in self.satellites:
+            try:
+                self.sat_host = sat_ip
+                self.sat_port = sat_port
+                message = self.protocol.build_message(
+                    message_type=0,
+                    dest_ipv6=self.sat_host,
+                    dest_port=self.sat_port,
+                    message_content=message_content
+                )
+                self.sock.sendto(message, (self.sat_host, self.sat_port))
+                return message
+            except ValueError:
+                continue
+        return None
 
     def send_alert(self, alert_type):
         """Send emergency alert to satellite"""
@@ -53,18 +67,21 @@ class WindTurbineNode:
             "timestamp": time.time()
         }
 
-        try:
-            message = self.protocol.build_message(
-                message_type=1,
-                dest_ipv6=self.sat_host,
-                dest_port=self.sat_port,
-                message_content=str(alert_message)
-            )
-            self.sock.sendto(message, (self.sat_host, self.sat_port))
-            return message
-        except ValueError as e:
-            print(f"Error sending alert: {e}")
-            return None
+        for distance, sat_ip, sat_port in self.satellites:
+            try:
+                self.sat_host = sat_ip
+                self.sat_port = sat_port
+                message = self.protocol.build_message(
+                    message_type=1,
+                    dest_ipv6=self.sat_host,
+                    dest_port=self.sat_port,
+                    message_content=str(alert_message)
+                )
+                self.sock.sendto(message, (self.sat_host, self.sat_port))
+                return message
+            except ValueError:
+                continue
+        return None
 
 if __name__ == "__main__":
     turbine = WindTurbineNode("::", 12345, "fd00::1", 54321)
