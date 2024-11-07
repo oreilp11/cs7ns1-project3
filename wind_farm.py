@@ -6,26 +6,35 @@ import csv
 
 
 class WindTurbineNode:
-    def __init__(self, listen_ip, listen_port, sat_ip, sat_port):
+    def __init__(self):
         self.protocol = Bob2Protocol()
+        self.wf_host, self.satellites = self.load_network()
+        print(self.wf_host,self.satellites)
+        self.current_sat_index = 0
+        if self.satellites:
+            closest_satellite = self.satellites[self.current_sat_index]
+            self.sat_host = closest_satellite[1]
+            self.sat_port = closest_satellite[2]
+        else:
+            print("No satellites available")
 
-        self.sat_host = sat_ip
-        self.sat_port = sat_port
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(self.wf_host)
 
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-        self.sock.bind((listen_ip, listen_port))
-        self.satellites = self.load_satellites()
+        print(f"Wind Turbine Node listening on {self.wf_host}")
+        print(f"Closest Satellite: {self.sat_host}:{self.sat_port}")
 
-    def load_satellites(self):
+    def load_network(self):
+        windfarm = ()
         satellites = []
-        with open('/home/veksor/Documents/SC/Project 3/cs7ns1-project3/distances_common.csv', 'r') as csvfile:
+        with open('distances_common.csv', 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 if row['Device1'] == 'Offshore Windfarm':
                     satellites.append((float(row['Distance_km']), row['IP2'], int(row['Port2'])))
+                    windfarm = (row['IP1'], int(row['Port1']))
         satellites.sort()
-        return satellites
+        return windfarm, satellites
 
     def generate_turbine_data(self):
         """Simulate wind turbine sensor data"""
@@ -40,37 +49,36 @@ class WindTurbineNode:
         }
 
     def send_status_update(self):
-        """Send turbine status to satellite"""
+        """Send turbine status to the closest available satellite"""
         turbine_data = self.generate_turbine_data()
         message_content = str(turbine_data)
-
-        for distance, sat_ip, sat_port in self.satellites:
-            try:
-                self.sat_host = sat_ip
-                self.sat_port = sat_port
-                message = self.protocol.build_message(
-                    message_type=0,
-                    dest_ipv6=self.sat_host,
-                    dest_port=self.sat_port,
-                    message_content=message_content
-                )
-                self.sock.sendto(message, (self.sat_host, self.sat_port))
-                return message
-            except ValueError:
-                continue
-        return None
+        message = self.protocol.build_message(
+            message_type=0,
+            dest_ipv6="::1",
+            dest_port=self.sat_port,
+            message_content=message_content
+        )
+        self.sock.sendto(message, (self.sat_host, self.sat_port))
+        print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to ", self.sat_host, ":", self.sat_port)
+        # Wait for acknowledgment
+        self.sock.settimeout(2)
+        try:
+            response, _ = self.sock.recvfrom(1024)
+            # If response is received, assume success
+            print("\033[91mAcknowledgment Received:\033[0m", self.protocol.parse_message(response))
+            return message
+        except socket.timeout:
+            ValueError("No response received")
 
     def send_alert(self, alert_type):
-        """Send emergency alert to satellite"""
+        """Send emergency alert to the closest available satellite"""
         alert_message = {
             "alert_type": alert_type,
             "timestamp": time.time()
         }
 
-        for distance, sat_ip, sat_port in self.satellites:
+        while self.current_sat_index < len(self.satellites):
             try:
-                self.sat_host = sat_ip
-                self.sat_port = sat_port
                 message = self.protocol.build_message(
                     message_type=1,
                     dest_ipv6=self.sat_host,
@@ -78,13 +86,33 @@ class WindTurbineNode:
                     message_content=str(alert_message)
                 )
                 self.sock.sendto(message, (self.sat_host, self.sat_port))
-                return message
+
+                # Set timeout and wait for acknowledgment
+                self.sock.settimeout(2)
+                try:
+                    response, _ = self.sock.recvfrom(1024)
+                    # If response is received, assume success
+                    return message
+                except socket.timeout:
+                    # No response received, try next satellite
+                    pass
+                finally:
+                    self.sock.settimeout(None)  # Reset timeout
             except ValueError:
-                continue
+                pass  # Handle any value errors
+            # Satellite didn't respond, try the next closest
+            self.current_sat_index += 1
+            if self.current_sat_index < len(self.satellites):
+                next_satellite = self.satellites[self.current_sat_index]
+                self.sat_host = next_satellite[1]
+                self.sat_port = next_satellite[2]
+            else:
+                print("All satellites are unresponsive.")
+                break
         return None
 
 if __name__ == "__main__":
-    turbine = WindTurbineNode("::", 12345, "fd00::1", 54321)
+    turbine = WindTurbineNode()
 
     # Simulation loop
     try:
@@ -93,10 +121,9 @@ if __name__ == "__main__":
             message = turbine.send_status_update()
             if message:
                 parsed = turbine.protocol.parse_message(message)
-                print("Status Update Sent:", parsed["message_content"])
 
             # Simulate random alert (1% chance)
-            if random.random() < 0.01:
+            if random.random() < 0.000001:
                 alert_types = ["high_wind", "excessive_vibration", "grid_disconnect"]
                 alert = turbine.send_alert(random.choice(alert_types))
                 if alert:
