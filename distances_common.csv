@@ -1,15 +1,15 @@
-Device1,IP1,Port1,Device2,IP2,Port2,Distance_km
-Offshore Windfarm,localhost,63867,Satellite 4,localhost,20303,566.3920903402518
-Offshore Windfarm,localhost,63867,Satellite 5,localhost,14882,590.592922409336
-Ground Station,localhost,21461,Satellite 1,localhost,33376,651.9394143630219
-Ground Station,localhost,21461,Satellite 3,localhost,12553,536.6721531810646
-Satellite 1,localhost,33376,Satellite 2,localhost,62009,176.70597047072292
-Satellite 1,localhost,33376,Satellite 3,localhost,12553,171.40011668607463
-Satellite 1,localhost,33376,Satellite 4,localhost,20303,565.0566343296927
-Satellite 1,localhost,33376,Satellite 5,localhost,14882,425.9213542427757
-Satellite 2,localhost,62009,Satellite 3,localhost,12553,347.58739908115194
-Satellite 2,localhost,62009,Satellite 4,localhost,20303,394.4616584663204
-Satellite 2,localhost,62009,Satellite 5,localhost,14882,260.0
-Satellite 3,localhost,12553,Satellite 4,localhost,20303,729.3894707219182
-Satellite 3,localhost,12553,Satellite 5,localhost,14882,588.5312226211962
-Satellite 4,localhost,20303,Satellite 5,localhost,14882,141.4213562373095
+id1,id2,Distance_km
+0,4,566.3920903402518
+0,5,590.592922409336
+-1,1,651.9394143630219
+-1,3,536.6721531810646
+1,2,176.70597047072292
+1,3,171.40011668607463
+1,4,565.0566343296927
+1,5,425.9213542427757
+2,3,347.58739908115194
+2,4,394.4616584663204
+2,5,260.0
+3,4,729.3894707219182
+3,5,588.5312226211962
+4,5,141.4213562373095

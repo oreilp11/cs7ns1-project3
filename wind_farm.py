@@ -3,38 +3,34 @@ import time
 import random
 import socket
 import csv
+from find_shortest_way import find_shortest_path
 
 
 class WindTurbineNode:
     def __init__(self):
         self.protocol = Bob2Protocol()
-        self.wf_host, self.satellites = self.load_network()
-        print(self.wf_host,self.satellites)
-        self.current_sat_index = 0
-        if self.satellites:
-            closest_satellite = self.satellites[self.current_sat_index]
-            self.sat_host = closest_satellite[1]
-            self.sat_port = closest_satellite[2]
-        else:
-            print("No satellites available")
+        self.wf_host, self.next_satellite,self.shortest_path = self.load_network()
+        print(self.wf_host,self.shortest_path,self.next_satellite)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.wf_host)
 
         print(f"Wind Turbine Node listening on {self.wf_host}")
-        print(f"Closest Satellite: {self.sat_host}:{self.sat_port}")
 
     def load_network(self):
         windfarm = ()
-        satellites = []
-        with open('distances_common.csv', 'r') as csvfile:
+        shortest_path = find_shortest_path(0,-1)
+        print(shortest_path)
+        # open csv file to find windfarm ip and port
+        with open('devices_ip.csv', 'r') as csvfile:
             reader = csv.DictReader(csvfile)
+            # header is id, name, ip, port. shortes_path give a list of id, we need to find the ip and port of the windfarm
             for row in reader:
-                if row['Device1'] == 'Offshore Windfarm':
-                    satellites.append((float(row['Distance_km']), row['IP2'], int(row['Port2'])))
-                    windfarm = (row['IP1'], int(row['Port1']))
-        satellites.sort()
-        return windfarm, satellites
+                if int(row['id']) == shortest_path[0]:
+                    windfarm = (row['ip'], int(row['port']))
+                elif int(row['id']) == shortest_path[1]:
+                    next_satellite = (row['ip'], int(row['port']))
+        return windfarm, next_satellite, shortest_path
 
     def generate_turbine_data(self):
         """Simulate wind turbine sensor data"""
@@ -55,12 +51,11 @@ class WindTurbineNode:
         message = self.protocol.build_message(
             message_type=0,
             dest_ipv6="::1",
-            dest_port=self.sat_port,
+            dest_port=self.next_satellite[1],
             message_content=message_content
         )
-        self.sock.sendto(message, (self.sat_host, self.sat_port))
-        print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to ", self.sat_host, ":", self.sat_port)
-        # Wait for acknowledgment
+        self.sock.sendto(message, self.next_satellite)
+        print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to ", self.next_satellite)
         self.sock.settimeout(2)
         try:
             response, _ = self.sock.recvfrom(1024)
@@ -69,47 +64,6 @@ class WindTurbineNode:
             return message
         except socket.timeout:
             ValueError("No response received")
-
-    def send_alert(self, alert_type):
-        """Send emergency alert to the closest available satellite"""
-        alert_message = {
-            "alert_type": alert_type,
-            "timestamp": time.time()
-        }
-
-        while self.current_sat_index < len(self.satellites):
-            try:
-                message = self.protocol.build_message(
-                    message_type=1,
-                    dest_ipv6=self.sat_host,
-                    dest_port=self.sat_port,
-                    message_content=str(alert_message)
-                )
-                self.sock.sendto(message, (self.sat_host, self.sat_port))
-
-                # Set timeout and wait for acknowledgment
-                self.sock.settimeout(2)
-                try:
-                    response, _ = self.sock.recvfrom(1024)
-                    # If response is received, assume success
-                    return message
-                except socket.timeout:
-                    # No response received, try next satellite
-                    pass
-                finally:
-                    self.sock.settimeout(None)  # Reset timeout
-            except ValueError:
-                pass  # Handle any value errors
-            # Satellite didn't respond, try the next closest
-            self.current_sat_index += 1
-            if self.current_sat_index < len(self.satellites):
-                next_satellite = self.satellites[self.current_sat_index]
-                self.sat_host = next_satellite[1]
-                self.sat_port = next_satellite[2]
-            else:
-                print("All satellites are unresponsive.")
-                break
-        return None
 
 if __name__ == "__main__":
     turbine = WindTurbineNode()
@@ -121,14 +75,6 @@ if __name__ == "__main__":
             message = turbine.send_status_update()
             if message:
                 parsed = turbine.protocol.parse_message(message)
-
-            # Simulate random alert (1% chance)
-            if random.random() < 0.000001:
-                alert_types = ["high_wind", "excessive_vibration", "grid_disconnect"]
-                alert = turbine.send_alert(random.choice(alert_types))
-                if alert:
-                    parsed = turbine.protocol.parse_message(alert)
-                    print("Alert Sent:", parsed["message_content"])
 
             time.sleep(5)
     except KeyboardInterrupt:
