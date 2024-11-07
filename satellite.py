@@ -4,51 +4,39 @@ import random
 import time
 import threading
 from bob2_protocol import Bob2Protocol
+from find_shortest_way import find_shortest_path
 
 class Satellite:
     def __init__(self, sat_id):
         self.protocol = Bob2Protocol()
-        # Load connected devices from the CSV file
-        self.sat_host, self.satellites = self.load_network(sat_id)
+        self.sat_id = int(sat_id)  # Ensure sat_id is an integer
+        self.sat_host, self.next_device, self.shortest_path = self.load_network()
         self.name = f"Satellite {sat_id}"
-        if self.satellites:
-            closest_satellite = self.satellites[0]
-            self.next_sat_host = closest_satellite['ip']
-            self.next_sat_port = closest_satellite['port']
-        else:
-            print("No satellites available")
 
-        # Setup UDP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.sat_host)
-        print(f"Satellite listening on {self.sat_host}")
-        print(f"Closest Satellite: {self.next_sat_host}:{self.next_sat_port}")
+        print(f"{self.name} listening on {self.sat_host}")
+        print(f"Shortest path to Ground Station: {self.shortest_path}")
+        print(f"Next device: {self.next_device}")
 
-    def load_network(self, id):
-        act_sat = ()
-        satellites = []
-        with open('distances_common.csv', 'r') as csvfile:
+    def load_network(self):
+        current_device = ()
+        shortest_path = find_shortest_path(self.sat_id, -1)
+        # ...existing code...
+        with open('devices_ip.csv', 'r') as csvfile:
             reader = csv.DictReader(csvfile)
+            devices = {}
             for row in reader:
-                if row['Device1'] == 'Satellite ' + str(id):
-                    satellites.append({
-                        'distance': float(row['Distance_km']),
-                        'name': row['Device2'],
-                        'ip': row['IP2'],
-                        'port': int(row['Port2'])
-                    })
-                    act_sat = (row['IP1'], int(row['Port1']))
-                elif row['Device2'] == 'Satellite ' + str(id):
-                    satellites.append({
-                        'distance': float(row['Distance_km']),
-                        'name': row['Device1'],
-                        'ip': row['IP1'],
-                        'port': int(row['Port1'])
-                    })
-                    act_sat = (row['IP2'], int(row['Port2']))
+                devices[int(row['id'])] = (row['ip'], int(row['port']))
 
-        satellites.sort(key=lambda x: x['distance'])
-        return act_sat, satellites
+            current_device = devices[self.sat_id]
+            if len(shortest_path) > 1:
+                next_device_id = shortest_path[1]
+                next_device = devices[next_device_id]
+            else:
+                next_device = None
+
+        return current_device, next_device, shortest_path
 
     def simulate_starlink_delay(self):
         """Simulate StarLink transmission delay with jitter"""
@@ -57,49 +45,23 @@ class Satellite:
         return (base_delay + jitter) / 1000  # Convert to seconds
 
     def forward_message(self, parsed_message):
-        """Forward message to Ground Station or next satellite"""
+        # Simulate delay
         time.sleep(self.simulate_starlink_delay())
-        success = False
 
-        # Attempt to send to Ground Station first
-        for device in self.satellites:
-            if device['name'] == 'Ground Station':
-                try:
-                    message = self.protocol.build_message(
-                        message_type=parsed_message["message_type"],
-                        dest_ipv6="::1",  # Use dummy IPv6
-                        dest_port=device['port'],
-                        message_content=parsed_message["message_content"]
-                    )
-                    self.sock.sendto(message, (device['ip'], device['port']))
-                    print(f"Forwarded message to Ground Station at {device['ip']}:{device['port']}")
-                    success = True
-                    break
-                except Exception as e:
-                    print(f"Error forwarding to Ground Station: {e}")
-                    continue
-
-        if not success:
-            # If Ground Station is unreachable, forward to the next closest satellite
-            for device in self.satellites:
-                if 'Satellite' in device['name'] and device['name'] != self.name:
-                    try:
-                        message = self.protocol.build_message(
-                            message_type=parsed_message["message_type"],
-                            dest_ipv6='::1',  # Use dummy IPv6
-                            dest_port=device['port'],
-                            message_content=parsed_message["message_content"]
-                        )
-                        self.sock.sendto(message, (device['ip'], device['port']))
-                        print(f"Forwarded message to {device['name']} at {device['ip']}:{device['port']}")
-                        success = True
-                        break
-                    except Exception as e:
-                        print(f"Error forwarding to {device['name']}: {e}")
-                        continue
-
-        if not success:
-            print("No available devices to forward the message.")
+        if self.next_device:
+            try:
+                message = self.protocol.build_message(
+                    message_type=parsed_message["message_type"],
+                    dest_ipv6="::1",
+                    dest_port=self.next_device[1],
+                    message_content=parsed_message["message_content"]
+                )
+                self.sock.sendto(message, self.next_device)
+                print(f"Forwarded message to {self.next_device} along path {self.shortest_path}")
+            except Exception as e:
+                print(f"Error forwarding to next device: {e}")
+        else:
+            print("No next device to forward the message.")
 
     def start_relay(self):
         """Start listening for and forwarding messages"""
@@ -112,11 +74,15 @@ class Satellite:
                     print(f"DEBUG: Message length: {len(message_data)} bytes")
                     print(f"Received message from {addr}")
 
+
                     try:
                         parsed_message = self.protocol.parse_message(message_data)
 
 
                         print(f"DEBUG: Parsed message: {parsed_message}")
+                        if parsed_message["message_type"] == 2:
+                            print(f"Received ACK from {addr}")
+                            continue
 
                         # Send acknowledgment back to the sender immediately
                         try:

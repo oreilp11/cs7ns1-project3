@@ -1,7 +1,7 @@
 id,name,ip,port
 -1,Ground Station,localhost,21461
 0,Offshore Windfarm,localhost,63867
-1,Satellite 1,localhost,33376
+1,Satellite 1,localhost,33377
 2,Satellite 2,localhost,62009
 3,Satellite 3,localhost,12553
 4,Satellite 4,localhost,20303
