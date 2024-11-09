@@ -12,26 +12,111 @@ class WindTurbineNode:
     def __init__(self, device_list_path, connection_list_path):
         self.device_list_path = device_list_path
         self.connection_list_path = connection_list_path
-        self.wf_host, self.next_satellite, self.shortest_path = self.load_network()
+        self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
+        self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
+        self.activate_device()
+        self.next_satellite, self.shortest_path = self.load_nearest_satellite()
         print(self.wf_host, self.shortest_path, self.next_satellite)
+        if self.next_satellite is not None:
+            print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
+        else:
+            print("No satellites online yet.")
+    
 
-        # Remove socket initialization
-        print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
+    def activate_device(self):
+        with open(self.device_list_path, 'r', newline='') as device_file:
+            device_dict = csv.DictReader(device_file)
+            devices = list(device_dict)
+            fields = device_dict.fieldnames
 
-    def load_network(self):
-        windfarm = ()
-        shortest_path = find_shortest_path(self.connection_list_path, 0, -1)
-        # print(shortest_path)
-        # open csv file to find windfarm ip and port
-        with open(self.device_list_path, 'r') as csvfile:
-            reader = csv.DictReader(csvfile)
-            # header is id, name, ip, port. shortes_path give a list of id, we need to find the ip and port of the windfarm
-            for row in reader:
-                if int(row['id']) == shortest_path[0]:
-                    windfarm = (row['ip'], int(row['port']))
-                elif int(row['id']) == shortest_path[1]:
-                    next_satellite = (row['ip'], int(row['port']))
-        return windfarm, next_satellite, shortest_path
+        for device in devices:
+            if int(device["id"]) == self.wf_id:
+                device['status'] = 1
+        
+        with open(self.device_list_path, 'w', newline='') as device_file:
+            device_writer = csv.DictWriter(device_file, fields)
+            device_writer.writeheader()
+            device_writer.writerows(devices)
+
+
+    def deactivate_device(self):
+        with open(self.device_list_path, 'r', newline='') as device_file:
+            device_dict = csv.DictReader(device_file)
+            devices = list(device_dict)
+            fields = device_dict.fieldnames
+
+        for device in devices:
+            if int(device["id"]) == self.wf_id:
+                device['status'] = 0
+        
+        with open(self.device_list_path, 'w', newline='') as device_file:
+            device_writer = csv.DictWriter(device_file, fields)
+            device_writer.writeheader()
+            device_writer.writerows(devices)
+
+
+    def load_device_by_name(self, device_name):
+        device_host = ()
+        device_id = None
+        with open(self.device_list_path, 'r') as device_file:
+            device_dict = csv.DictReader(device_file)
+            for device in device_dict:
+                if device['name'] == device_name:
+                    device_host = (device['ip'], int(device['port']))
+                    device_id = int(device["id"])
+        return device_id, device_host
+    
+
+    def load_device_by_id(self, device_id):
+        device_host = ()
+        device_name = None
+        with open(self.device_list_path, 'r') as device_file:
+            device_dict = csv.DictReader(device_file)
+            for device in device_dict:
+                if int(device['id'] )== device_id:
+                    device_host = (device['ip'], int(device['port']))
+                    device_name = device["name"]
+        return device_name, device_host
+
+
+    def load_nearest_satellite(self):
+        active_devices, broken_devices = self.get_active_devices()
+        shortest_path = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
+        
+        if shortest_path is None:
+            return None, None
+        
+        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
+        return next_sat_host, shortest_path
+    
+
+    def update_nearest_satellite(self):
+        active_devices, broken_devices = self.get_active_devices()
+        shortest_path = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
+
+        if shortest_path is None:
+            self.next_satellite = None
+            self.shortest_path = None
+            return
+        
+        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
+        self.next_satellite = next_sat_host
+        self.shortest_path = shortest_path
+    
+
+    def get_active_devices(self):
+        active_devices = []
+        broken_devices = []
+        with open(self.device_list_path, 'r') as device_file:
+            device_dict = csv.DictReader(device_file)
+            for device in device_dict:
+                if int(device['status']) == 1:
+                    active_devices.append(device['id'])
+                else:
+                    broken_devices.append(device['id'])
+
+        return active_devices, broken_devices
+
 
     def generate_turbine_data(self):
         """Simulate wind turbine sensor data"""
@@ -45,8 +130,13 @@ class WindTurbineNode:
             "timestamp": time.time()
         }
 
+
     def send_status_update(self):
         """Send turbine status to the closest available satellite using HTTP"""
+        self.update_nearest_satellite()
+        if self.next_satellite is None:
+            print("No satellites online. No message sent...")
+            return
         turbine_data = self.generate_turbine_data()
         message_content = str(turbine_data)
 
@@ -81,22 +171,22 @@ class WindTurbineNode:
         except Exception as e:
             print(f"Error sending status update: {e}")
 
+
 if __name__ == "__main__":
-    base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ip.csv")
-    connections = os.path.join(base_path, "distances_common.csv")
-
-    turbine = WindTurbineNode(devices, connections)
-    input("Wind Turbine Online. Press any key to start...")
-
-    # Simulation loop
     try:
+        base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
+        devices = os.path.join(base_path, "devices_ip.csv")
+        connections = os.path.join(base_path, "distances_common.csv")
+
+        turbine = WindTurbineNode(devices, connections)
+        input("Wind Turbine Online. Press any key to start...")
+
+        # Simulation loop
         while True:
             # Send regular status update
             message = turbine.send_status_update()
-            if message:
-                parsed = turbine.protocol.parse_message(message)
-
             time.sleep(5)
     except KeyboardInterrupt:
         print("\nSimulation stopped by user")
+    finally:
+        turbine.deactivate_device()

@@ -12,8 +12,9 @@ class GroundStationNode:
         self.device_list_path = device_list_path
         self.connection_list_path = connection_list_path
         self.name = "Ground Station"
-        self.sat_host = self.load_network()
-        self.app = Flask("GroundStation")
+        self.gs_id, self.gs_host = self.load_device_by_name(self.name)
+        self.activate_device()
+        self.app = Flask(self.name.replace(" ",""))
 
         @self.app.route('/', methods=['GET'])
         def receive_data():
@@ -35,22 +36,59 @@ class GroundStationNode:
             print(f"\033[92mData: {data}\033[0m")
             return jsonify({"message": "Data received at Ground Station"})
 
-    def load_network(self):
-        current_device = ()
-        with open(self.device_list_path, 'r') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                if row['name'] == self.name:
-                    current_device = (row['ip'], int(row['port']))
-        return current_device
+
+    def activate_device(self):
+        with open(self.device_list_path, 'r', newline='') as device_file:
+            device_dict = csv.DictReader(device_file)
+            devices = list(device_dict)
+            fields = device_dict.fieldnames
+
+        for device in devices:
+            if int(device["id"]) == self.gs_id:
+                device['status'] = 1
+        
+        with open(self.device_list_path, 'w', newline='') as device_file:
+            device_writer = csv.DictWriter(device_file, fields)
+            device_writer.writeheader()
+            device_writer.writerows(devices)
+
+
+    def deactivate_device(self):
+        with open(self.device_list_path, 'r', newline='') as device_file:
+            device_dict = csv.DictReader(device_file)
+            devices = list(device_dict)
+            fields = device_dict.fieldnames
+
+        for device in devices:
+            if int(device["id"]) == self.gs_id:
+                device['status'] = 0
+        
+        with open(self.device_list_path, 'w', newline='') as device_file:
+            device_writer = csv.DictWriter(device_file, fields)
+            device_writer.writeheader()
+            device_writer.writerows(devices)
+
+
+    def load_device_by_name(self, device_name):
+        device_host = ()
+        device_id = None
+        with open(self.device_list_path, 'r') as device_file:
+            device_dict = csv.DictReader(device_file)
+            for device in device_dict:
+                if device['name'] == device_name:
+                    device_host = (device['ip'], int(device['port']))
+                    device_id = int(device["id"])
+        return device_id, device_host
+
 
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
-            "host": self.sat_host[0],
-            "port": self.sat_host[1],
+            "host": self.gs_host[0],
+            "port": self.gs_host[1],
             "use_reloader": False,
             "debug": False
         }, daemon=True).start()
+
 
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
@@ -60,5 +98,11 @@ if __name__ == "__main__":
     ground_station = GroundStationNode(devices, connections)
     ground_station.start_flask_app()
     print("Ground Station Online.")
-    while True:
-        pass
+
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("\nSimulation stopped by user")
+    finally:
+        ground_station.deactivate_device()

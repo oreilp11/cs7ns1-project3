@@ -13,6 +13,8 @@ def find_shortest_path(connection_list_path, start_node, end_node, broken_device
     if start_node in broken_devices or end_node in broken_devices:
         print("Error: Start or end node is in broken devices list")
         return
+    
+    print(f"Broken nodes: {broken_devices}")
 
     graph = {}
     with open(connection_list_path, 'r') as connections_file:
