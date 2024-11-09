@@ -1,71 +1,116 @@
+# src/protocol/bob2_protocol.py
+
 import struct
 import socket
 import zlib
+import time
 
-CURRENT_MAJOR_VERSION=0
-CURRENT_MINOR_VERISON=2
 
 class Bob2Protocol:
     def __init__(self, version_major=0, version_minor=2):
         self.version_major = version_major
         self.version_minor = version_minor
 
-    def build_message(self, message_type, dest_ipv6, dest_port, message_content, multiple_packets=False, packet_num=0):
-        try:
-            dest_ip_bytes = socket.inet_pton(socket.AF_INET6, dest_ipv6)
-        except socket.error:
-            raise ValueError("Invalid IPv6 address")
+    def build_message(self, message_type, dest_ipv6, dest_port, source_ipv6, source_port, sequence_number, message_content):
+        # Create the header using Bob2Headers
+        header = Bob2Headers(
+            version_major=self.version_major,
+            version_minor=self.version_minor,
+            message_type=message_type,
+            dest_ipv6=dest_ipv6,
+            dest_port=dest_port,
+            source_ipv6=source_ipv6,
+            source_port=source_port,
+            sequence_number=sequence_number
+        ).build_header()
 
-        header = struct.pack('!BBB', self.version_major, self.version_minor, message_type)
-        if multiple_packets:
-            packet_bytes = packet_num.to_bytes(2, byteorder='big')
-        else:
-            packet_bytes = bytes(2)
-
-        dest_port_bytes = struct.pack('!H', dest_port)
-
-        message_length = len(message_content)
-        if message_length > (1 << 40) - 1:
-            raise ValueError("Message content exceeds maximum allowed size")
-
-        length_bytes = message_length.to_bytes(5, byteorder='big')
+        # Calculate checksum
         checksum = zlib.crc32(message_content.encode('utf-8'))
         checksum_bytes = struct.pack('!I', checksum)
 
-        full_message = (header + packet_bytes + dest_ip_bytes + dest_port_bytes + length_bytes +
-                        checksum_bytes + message_content.encode('utf-8'))
+        # Build the full message
+        message_length = len(message_content)
+        length_bytes = message_length.to_bytes(5, byteorder='big')
+
+        full_message = header + length_bytes + checksum_bytes + message_content.encode('utf-8')
         return full_message
 
     def parse_message(self, raw_data):
-        version_major, version_minor, message_type = struct.unpack('!BBB', raw_data[:3])
-        packet_num = int.from_bytes(raw_data[3:5], byteorder='big')
-        if packet_num == 0:
-            multiple_packets = False
-        dest_ip_bytes = raw_data[5:21]
-        dest_ipv6 = socket.inet_ntop(socket.AF_INET6, dest_ip_bytes)
-        dest_port = struct.unpack('!H', raw_data[21:23])[0]
-        message_length = int.from_bytes(raw_data[23:28], byteorder='big')
+        # Parse the header
+        header_data = raw_data[:47]  # Header size is 47 bytes
+        header_info = Bob2Headers().parse_header(header_data)
 
-        expected_checksum = struct.unpack('!I', raw_data[28:32])[0]
-        message_content = raw_data[32:32 + message_length]
+        # Parse the rest of the message
+        message_length = int.from_bytes(raw_data[47:52], byteorder='big')
+        expected_checksum = struct.unpack('!I', raw_data[52:56])[0]
+        message_content = raw_data[56:56 + message_length]
         actual_checksum = zlib.crc32(message_content)
 
         if expected_checksum != actual_checksum:
             raise ValueError("Checksum verification failed")
 
-        response =  {
+        # Add parsed message content to the header info
+        header_info.update({
+            "message_length": message_length,
+            "checksum": expected_checksum,
+            "message_content": message_content.decode('utf-8'),
+        })
+
+        return header_info
+
+
+class Bob2Headers:
+    def __init__(
+            self, version_major=0, version_minor=0, message_type=0,
+            dest_ipv6="::1", dest_port=12345, source_ipv6="::1", source_port=12345,
+            sequence_number=0, timestamp=None
+        ):
+        self.version_major = version_major
+        self.version_minor = version_minor
+        self.message_type = message_type
+        self.dest_ipv6 = dest_ipv6
+        self.dest_port = dest_port
+        self.source_ipv6 = source_ipv6
+        self.source_port = source_port
+        self.sequence_number = sequence_number
+        self.timestamp = timestamp if timestamp is not None else int(
+            time.time())
+
+    def build_header(self):
+        try:
+            dest_ip_bytes = socket.inet_pton(socket.AF_INET6, self.dest_ipv6)
+            source_ip_bytes = socket.inet_pton(
+                socket.AF_INET6, self.source_ipv6)
+        except socket.error:
+            raise ValueError("Invalid IPv6 address")
+
+        header = struct.pack("!BBB", self.version_major,
+                             self.version_minor, self.message_type)
+        header += dest_ip_bytes + struct.pack("!H", self.dest_port)
+        header += source_ip_bytes + struct.pack("!H", self.source_port)
+        header += struct.pack("!I", self.sequence_number)
+        header += struct.pack("!I", self.timestamp)
+
+        return header
+
+    def parse_header(self, raw_data):
+        version_major, version_minor, message_type = struct.unpack(
+            "!BBB", raw_data[:3])
+        dest_ipv6 = socket.inet_ntop(socket.AF_INET6, raw_data[3:19])
+        dest_port = struct.unpack("!H", raw_data[19:21])[0]
+        source_ipv6 = socket.inet_ntop(socket.AF_INET6, raw_data[21:37])
+        source_port = struct.unpack("!H", raw_data[37:39])[0]
+        sequence_number = struct.unpack("!I", raw_data[39:43])[0]
+        timestamp = struct.unpack("!I", raw_data[43:47])[0]
+
+        return {
             "version_major": version_major,
             "version_minor": version_minor,
             "message_type": message_type,
-            "destination_ip": dest_ipv6,
-            "destination_port": dest_port,
-            "message_length": message_length,
-            "checksum": expected_checksum,
-            "message_content": message_content.decode('utf-8')
+            "dest_ipv6": dest_ipv6,
+            "dest_port": dest_port,
+            "source_ipv6": source_ipv6,
+            "source_port": source_port,
+            "sequence_number": sequence_number,
+            "timestamp": timestamp,
         }
-        if multiple_packets:
-            response["packet_num"] = packet_num
-        else:
-            response['multiple_packets'] = False
-
-        return response

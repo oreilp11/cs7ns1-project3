@@ -3,11 +3,13 @@ import time
 import random
 import socket
 import csv
+import os
 from find_shortest_way import find_shortest_path
 
 
 class WindTurbineNode:
     def __init__(self):
+        self.base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
         self.protocol = Bob2Protocol()
         self.wf_host, self.next_satellite,self.shortest_path = self.load_network()
         print(self.wf_host,self.shortest_path,self.next_satellite)
@@ -22,7 +24,7 @@ class WindTurbineNode:
         shortest_path = find_shortest_path(0,-1)
         print(shortest_path)
         # open csv file to find windfarm ip and port
-        with open('devices_ip.csv', 'r') as csvfile:
+        with open(os.path.join(self.base_path,'devices_ip.csv'), 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             # header is id, name, ip, port. shortes_path give a list of id, we need to find the ip and port of the windfarm
             for row in reader:
@@ -52,6 +54,9 @@ class WindTurbineNode:
             message_type=0,
             dest_ipv6="::1",
             dest_port=self.next_satellite[1],
+            source_ipv6="::1",
+            source_port=self.wf_host[1],
+            sequence_number=0,
             message_content=message_content
         )
         self.sock.sendto(message, self.next_satellite)

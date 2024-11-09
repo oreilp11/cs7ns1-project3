@@ -2,12 +2,14 @@ import csv
 import socket
 import random
 import time
+import os
 import threading
 from bob2_protocol import Bob2Protocol
 from find_shortest_way import find_shortest_path
 
 class Satellite:
     def __init__(self, sat_id):
+        self.base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
         self.protocol = Bob2Protocol()
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
         self.sat_host, self.next_device, self.shortest_path = self.load_network()
@@ -23,7 +25,7 @@ class Satellite:
         current_device = ()
         shortest_path = find_shortest_path(self.sat_id, -1)
         # ...existing code...
-        with open('devices_ip.csv', 'r') as csvfile:
+        with open(os.path.join(self.base_path, 'devices_ip.csv'), 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             devices = {}
             for row in reader:
@@ -54,6 +56,9 @@ class Satellite:
                     message_type=parsed_message["message_type"],
                     dest_ipv6="::1",
                     dest_port=self.next_device[1],
+                    source_ipv6="::1",
+                    source_port=self.sat_host[1],
+                    sequence_number=0,
                     message_content=parsed_message["message_content"]
                 )
                 self.sock.sendto(message, self.next_device)
@@ -90,6 +95,9 @@ class Satellite:
                                 message_type=2,  # ACK message type
                                 dest_ipv6="::1",
                                 dest_port=addr[1],
+                                source_ipv6="::1",
+                                source_port=self.sat_host[1],
+                                sequence_number=0,
                                 message_content="ACK"
                             )
                             self.sock.sendto(ack_message, addr)
@@ -113,7 +121,7 @@ class Satellite:
 if __name__ == "__main__":
     import sys
 
-    # Usage: python satellite.py <Satellite Name> <Listen IP> <Listen Port>
+    # Usage: python satellite.py <Satellite Name>
     if len(sys.argv) != 2:
         print("Usage: python satellite.py <Satellite id>")
         sys.exit(1)
