@@ -8,23 +8,24 @@ from find_shortest_way import find_shortest_path
 
 
 class WindTurbineNode:
-    def __init__(self):
-        self.base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
+    def __init__(self, device_list_path, connection_list_path):
+        self.device_list_path = device_list_path
+        self.connection_list_path = connection_list_path
         self.protocol = Bob2Protocol()
         self.wf_host, self.next_satellite, self.shortest_path = self.load_network()
-        print(self.wf_host,self.shortest_path,self.next_satellite)
+        print(self.wf_host, self.shortest_path, self.next_satellite)
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
         self.sock.bind(self.wf_host)
 
         print(f"Wind Turbine Node listening on {self.wf_host}")
 
     def load_network(self):
         windfarm = ()
-        shortest_path = find_shortest_path(0,-1)
-        print(shortest_path)
+        shortest_path = find_shortest_path(self.connection_list_path, 0, -1)
+        # print(shortest_path)
         # open csv file to find windfarm ip and port
-        with open(os.path.join(self.base_path,'devices_ip.csv'), 'r') as csvfile:
+        with open(self.device_list_path, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             # header is id, name, ip, port. shortes_path give a list of id, we need to find the ip and port of the windfarm
             for row in reader:
@@ -69,9 +70,15 @@ class WindTurbineNode:
             return message
         except socket.timeout:
             ValueError("No response received")
+        
 
 if __name__ == "__main__":
-    turbine = WindTurbineNode()
+    base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
+    devices = os.path.join(base_path, "devices_ip.csv")
+    connections = os.path.join(base_path, "distances_common.csv")
+
+    turbine = WindTurbineNode(devices, connections)
+    input("Wind Turbine Online. Press any key to start...")
 
     # Simulation loop
     try:

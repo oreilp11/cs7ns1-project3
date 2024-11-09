@@ -2,20 +2,20 @@ import csv
 import socket
 import random
 import time
-import os
 import threading
 from bob2_protocol import Bob2Protocol
 from find_shortest_way import find_shortest_path
 
 class Satellite:
-    def __init__(self, sat_id):
-        self.base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+    def __init__(self, sat_id, device_list_path, connection_list_path):
+        self.device_list_path = device_list_path
+        self.connection_list_path = connection_list_path
         self.protocol = Bob2Protocol()
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
         self.sat_host, self.next_device, self.shortest_path = self.load_network()
         self.name = f"Satellite {sat_id}"
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
         self.sock.bind(self.sat_host)
         print(f"{self.name} listening on {self.sat_host}")
         print(f"Shortest path to Ground Station: {self.shortest_path}")
@@ -23,9 +23,9 @@ class Satellite:
 
     def load_network(self):
         current_device = ()
-        shortest_path = find_shortest_path(self.sat_id, -1)
+        shortest_path = find_shortest_path(self.connection_list_path, self.sat_id, -1)
         # ...existing code...
-        with open(os.path.join(self.base_path, 'devices_ip.csv'), 'r') as csvfile:
+        with open(self.device_list_path, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             devices = {}
             for row in reader:
@@ -68,27 +68,25 @@ class Satellite:
         else:
             print("No next device to forward the message.")
 
-    def start_relay(self):
+    def start_relay(self, verbose=False):
         """Start listening for and forwarding messages"""
         try:
             while True:
                 try:
                     print("Waiting for incoming messages...")
                     message_data, addr = self.sock.recvfrom(4096)
-                    print(f"DEBUG: Raw message received: {message_data[:100]}...")  # Print first 100 bytes
-                    print(f"DEBUG: Message length: {len(message_data)} bytes")
                     print(f"Received message from {addr}")
-
+                    if verbose:
+                        print(f"DEBUG: Raw message received: {message_data[:100]}...")  # Print first 100 bytes
+                        print(f"DEBUG: Message length: {len(message_data)} bytes")
 
                     try:
                         parsed_message = self.protocol.parse_message(message_data)
-
-
-                        print(f"DEBUG: Parsed message: {parsed_message}")
+                        if verbose:
+                            print(f"DEBUG: Parsed message: {parsed_message}")
                         if parsed_message["message_type"] == 2:
                             print(f"Received ACK from {addr}")
                             continue
-
                         # Send acknowledgment back to the sender immediately
                         try:
                             ack_message = self.protocol.build_message(
@@ -101,7 +99,8 @@ class Satellite:
                                 message_content="ACK"
                             )
                             self.sock.sendto(ack_message, addr)
-                            print(f"DEBUG: Sent ACK to {addr}")
+                            if verbose:
+                                print(f"DEBUG: Sent ACK to {addr}")
                         except Exception as e:
                             print(f"Error sending ACK: {e}")
 
@@ -120,6 +119,7 @@ class Satellite:
 
 if __name__ == "__main__":
     import sys
+    import os
 
     # Usage: python satellite.py <Satellite Name>
     if len(sys.argv) != 2:
@@ -128,5 +128,10 @@ if __name__ == "__main__":
 
     sat_id = sys.argv[1]
 
-    satellite = Satellite(sat_id)
-    satellite.start_relay()
+    base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
+    devices = os.path.join(base_path, "devices_ip.csv")
+    connections = os.path.join(base_path, "distances_common.csv")
+
+    satellite = Satellite(sat_id, devices, connections)
+    input(f"Satellite {sat_id} Online. Press any key to start...")
+    satellite.start_relay(verbose=True)
