@@ -11,7 +11,7 @@ class WindTurbineNode:
     def __init__(self):
         self.base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
         self.protocol = Bob2Protocol()
-        self.wf_host, self.next_satellite,self.shortest_path = self.load_network()
+        self.wf_host, self.next_satellite, self.shortest_path = self.load_network()
         print(self.wf_host,self.shortest_path,self.next_satellite)
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
