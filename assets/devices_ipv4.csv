@@ -1,0 +1,8 @@
+id,name,ip,port
+-1,Ground Station,10.32.110.20,30100
+0,Offshore Windfarm,10.32.110.20,30000
+1,Satellite 1,10.35.70.32,30001
+2,Satellite 2,10.35.70.32,30002
+3,Satellite 3,10.35.70.32,30003
+4,Satellite 4,10.35.70.32,30004
+5,Satellite 5,10.32.110.20,30005

@@ -3,7 +3,9 @@ import socket
 import random
 import time
 import threading
-from bob2_protocol import Bob2Protocol
+
+#from bob2_protocol import Bob2Protocol
+from bob2_ipv4 import Bob2Protocol
 from find_shortest_way import find_shortest_path
 
 class Satellite:
@@ -15,7 +17,8 @@ class Satellite:
         self.sat_host, self.next_device, self.shortest_path = self.load_network()
         self.name = f"Satellite {sat_id}"
 
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        # self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.sat_host)
         print(f"{self.name} listening on {self.sat_host}")
         print(f"Shortest path to Ground Station: {self.shortest_path}")
@@ -52,11 +55,20 @@ class Satellite:
 
         if self.next_device:
             try:
+                # message = self.protocol.build_message(
+                #     message_type=parsed_message["message_type"],
+                #     dest_ipv6="::1",
+                #     dest_port=self.next_device[1],
+                #     source_ipv6="::1",
+                #     source_port=self.sat_host[1],
+                #     sequence_number=0,
+                #     message_content=parsed_message["message_content"]
+                # )
                 message = self.protocol.build_message(
                     message_type=parsed_message["message_type"],
-                    dest_ipv6="::1",
+                    dest_ipv4=self.next_device[0],
                     dest_port=self.next_device[1],
-                    source_ipv6="::1",
+                    source_ipv4=self.sat_host[0],
                     source_port=self.sat_host[1],
                     sequence_number=0,
                     message_content=parsed_message["message_content"]
@@ -89,11 +101,20 @@ class Satellite:
                             continue
                         # Send acknowledgment back to the sender immediately
                         try:
+                            # ack_message = self.protocol.build_message(
+                            #     message_type=2,  # ACK message type
+                            #     dest_ipv6="::1",
+                            #     dest_port=addr[1],
+                            #     source_ipv6="::1",
+                            #     source_port=self.sat_host[1],
+                            #     sequence_number=0,
+                            #     message_content="ACK"
+                            # )
                             ack_message = self.protocol.build_message(
                                 message_type=2,  # ACK message type
-                                dest_ipv6="::1",
+                                dest_ipv4=addr[0],
                                 dest_port=addr[1],
-                                source_ipv6="::1",
+                                source_ipv4=self.sat_host[0],
                                 source_port=self.sat_host[1],
                                 sequence_number=0,
                                 message_content="ACK"
@@ -129,7 +150,7 @@ if __name__ == "__main__":
     sat_id = sys.argv[1]
 
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ip.csv")
+    devices = os.path.join(base_path, "devices_ipv4.csv")
     connections = os.path.join(base_path, "distances_common.csv")
 
     satellite = Satellite(sat_id, devices, connections)

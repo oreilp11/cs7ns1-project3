@@ -2,7 +2,9 @@ import csv
 import socket
 import os
 import time
-from bob2_protocol import Bob2Protocol
+
+#from bob2_protocol import Bob2Protocol
+from bob2_ipv4 import Bob2Protocol
 
 class GroundStationNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -12,7 +14,8 @@ class GroundStationNode:
         self.name = "Ground Station"
         self.sat_host = self.load_network()
 
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        # self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.sat_host)
         print(f"{self.name} listening on {self.sat_host}")
 
@@ -50,15 +53,26 @@ class GroundStationNode:
 
                 # Send acknowledgment back to the sender immediately
                 try:
+                    # ack_message = self.protocol.build_message(
+                    #     message_type=2,  # ACK message type
+                    #     dest_ipv6="::1",
+                    #     dest_port=addr[1],
+                    #     source_ipv6="::1",
+                    #     source_port=self.sat_host[1],
+                    #     sequence_number=0,
+                    #     message_content="ACK"
+                    # )
+
                     ack_message = self.protocol.build_message(
                         message_type=2,  # ACK message type
-                        dest_ipv6="::1",
+                        dest_ipv4=addr[0],
                         dest_port=addr[1],
-                        source_ipv6="::1",
+                        source_ipv4=self.sat_host[0],
                         source_port=self.sat_host[1],
                         sequence_number=0,
                         message_content="ACK"
                     )
+
                     self.sock.sendto(ack_message, addr)
                     if verbose:
                         print(f"DEBUG: Sent ACK to {addr}")
@@ -72,7 +86,7 @@ class GroundStationNode:
 
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ip.csv")
+    devices = os.path.join(base_path, "devices_ipv4.csv")
     connections = os.path.join(base_path, "distances_common.csv")
 
     satellite = GroundStationNode(devices, connections)

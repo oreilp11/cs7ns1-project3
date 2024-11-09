@@ -1,11 +1,12 @@
-from bob2_protocol import Bob2Protocol
 import time
 import random
 import socket
 import csv
 import os
-from find_shortest_way import find_shortest_path
 
+from find_shortest_way import find_shortest_path
+#from bob2_protocol import Bob2Protocol
+from bob2_ipv4 import Bob2Protocol
 
 class WindTurbineNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -15,7 +16,8 @@ class WindTurbineNode:
         self.wf_host, self.next_satellite, self.shortest_path = self.load_network()
         print(self.wf_host, self.shortest_path, self.next_satellite)
 
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        #self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(self.wf_host)
 
         print(f"Wind Turbine Node listening on {self.wf_host}")
@@ -51,15 +53,26 @@ class WindTurbineNode:
         """Send turbine status to the closest available satellite"""
         turbine_data = self.generate_turbine_data()
         message_content = str(turbine_data)
+        # message = self.protocol.build_message(
+        #     message_type=0,
+        #     dest_ipv6="::1",
+        #     dest_port=self.next_satellite[1],
+        #     source_ipv6="::1",
+        #     source_port=self.wf_host[1],
+        #     sequence_number=0,
+        #     message_content=message_content
+        # )
+
         message = self.protocol.build_message(
             message_type=0,
-            dest_ipv6="::1",
+            dest_ipv4=self.next_satellite[0],
             dest_port=self.next_satellite[1],
-            source_ipv6="::1",
+            source_ipv4=self.wf_host[0],
             source_port=self.wf_host[1],
             sequence_number=0,
             message_content=message_content
         )
+
         self.sock.sendto(message, self.next_satellite)
         print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to ", self.next_satellite)
         self.sock.settimeout(2)
@@ -74,7 +87,7 @@ class WindTurbineNode:
 
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ip.csv")
+    devices = os.path.join(base_path, "devices_ipv4.csv")
     connections = os.path.join(base_path, "distances_common.csv")
 
     turbine = WindTurbineNode(devices, connections)
