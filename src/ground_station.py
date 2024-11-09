@@ -3,13 +3,9 @@ import os
 import time
 from flask import Flask, request, jsonify
 import threading
-import signal
-import sys
-# Replace bob2 imports with bobb
-bob2_protocol_path = os.path.abspath("../../bobb/src/utils/headers/")
-sys.path.append(bob2_protocol_path)
-import necessary_headers as bobb
-import optional_header as bobb_optional
+
+import protocol.headers as bobb
+
 
 class GroundStationNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -30,7 +26,7 @@ class GroundStationNode:
             header = bobb.BobbHeaders()
             header.parse_header(bytes.fromhex(bobb_header_hex))
 
-            opt_header = bobb_optional.BobbOptionalHeaders()
+            opt_header = bobb.BobbOptionalHeaders()
             opt_header.parse_optional_header(bytes.fromhex(bobb_optional_header_hex))
 
             end_to_end_delay = time.time() - opt_header.timestamp

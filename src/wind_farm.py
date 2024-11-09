@@ -5,13 +5,8 @@ import csv
 import os
 
 from find_shortest_way import find_shortest_path
+import protocol.headers as bobb
 
-# Add bobb imports
-bobb_protocol_path = os.path.abspath("../../bobb/src/utils/headers/")
-import sys
-sys.path.append(bobb_protocol_path)
-import necessary_headers as bobb
-import optional_header as bobb_optional
 
 class WindTurbineNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -65,7 +60,7 @@ class WindTurbineNode:
         header.message_type = 0
 
         # Build optional headers
-        opt_header = bobb_optional.BobbOptionalHeaders()
+        opt_header = bobb.BobbOptionalHeaders()
 
         # Serialize headers to hex
         bobb_header_hex = header.build_header().hex()

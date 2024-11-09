@@ -1,21 +1,15 @@
 import csv
-import socket
 import random
 import time
 import threading
 from flask import Flask, request, jsonify
 import requests
-import threading
 import os
 import sys
-# Replace bob2 imports with bobb
-# ...existing code...
-bobb_protocol_path = os.path.abspath("../../bobb/src/utils/headers/")
-sys.path.append(bobb_protocol_path)
-import necessary_headers as bobb
-import optional_header as bobb_optional
 
+import protocol.headers as bobb
 from find_shortest_way import find_shortest_path
+
 
 class Satellite:
     def __init__(self, sat_id, device_list_path, connection_list_path):
@@ -39,7 +33,7 @@ class Satellite:
             header = bobb.BobbHeaders()
             header.parse_header(bytes.fromhex(bobb_header_hex))
 
-            opt_header = bobb_optional.BobbOptionalHeaders()
+            opt_header = bobb.BobbOptionalHeaders()
             opt_header.parse_optional_header(bytes.fromhex(bobb_optional_header_hex))
 
             # Forward data to the next device
