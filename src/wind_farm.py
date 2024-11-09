@@ -1,26 +1,27 @@
 import time
 import random
-import socket
+import requests
 import csv
 import os
 
 from find_shortest_way import find_shortest_path
-#from bob2_protocol import Bob2Protocol
-from bob2_ipv4 import Bob2Protocol
+
+# Add bobb imports
+bobb_protocol_path = os.path.abspath("../../bobb/src/utils/headers/")
+import sys
+sys.path.append(bobb_protocol_path)
+import necessary_headers as bobb
+import optional_header as bobb_optional
 
 class WindTurbineNode:
     def __init__(self, device_list_path, connection_list_path):
         self.device_list_path = device_list_path
         self.connection_list_path = connection_list_path
-        self.protocol = Bob2Protocol()
         self.wf_host, self.next_satellite, self.shortest_path = self.load_network()
         print(self.wf_host, self.shortest_path, self.next_satellite)
 
-        #self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(self.wf_host)
-
-        print(f"Wind Turbine Node listening on {self.wf_host}")
+        # Remove socket initialization
+        print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
 
     def load_network(self):
         windfarm = ()
@@ -50,44 +51,44 @@ class WindTurbineNode:
         }
 
     def send_status_update(self):
-        """Send turbine status to the closest available satellite"""
+        """Send turbine status to the closest available satellite using HTTP"""
         turbine_data = self.generate_turbine_data()
         message_content = str(turbine_data)
-        # message = self.protocol.build_message(
-        #     message_type=0,
-        #     dest_ipv6="::1",
-        #     dest_port=self.next_satellite[1],
-        #     source_ipv6="::1",
-        #     source_port=self.wf_host[1],
-        #     sequence_number=0,
-        #     message_content=message_content
-        # )
 
-        message = self.protocol.build_message(
-            message_type=0,
-            dest_ipv4=self.next_satellite[0],
-            dest_port=self.next_satellite[1],
-            source_ipv4=self.wf_host[0],
-            source_port=self.wf_host[1],
-            sequence_number=0,
-            message_content=message_content
-        )
+        # Build bobb headers
+        header = bobb.BobbHeaders()
+        header.source_ipv4 = self.wf_host[0]
+        header.source_port = self.wf_host[1]
+        header.dest_ipv4 = self.next_satellite[0]
+        header.dest_port = self.next_satellite[1]
+        header.sequence_number = 0
+        header.message_type = 0
 
-        self.sock.sendto(message, self.next_satellite)
-        print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to ", self.next_satellite)
-        self.sock.settimeout(2)
+        # Build optional headers
+        opt_header = bobb_optional.BobbOptionalHeaders()
+
+        # Serialize headers to hex
+        bobb_header_hex = header.build_header().hex()
+        bobb_optional_header_hex = opt_header.build_optional_header().hex()
+
+        # Prepare headers for the HTTP request
+        headers = {
+            'X-Bobb-Header': bobb_header_hex,
+            'X-Bobb-Optional-Header': bobb_optional_header_hex
+        }
+
+        # Send HTTP GET request to the next satellite
+        url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
-            response, _ = self.sock.recvfrom(1024)
-            # If response is received, assume success
-            print("\033[91mAcknowledgment Received:\033[0m", self.protocol.parse_message(response))
-            return message
-        except socket.timeout:
-            ValueError("No response received")
-        
+            response = requests.get(url, headers=headers,data=message_content, verify=False)
+            print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
+            print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
+        except Exception as e:
+            print(f"Error sending status update: {e}")
 
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ipv4.csv")
+    devices = os.path.join(base_path, "devices_ip.csv")
     connections = os.path.join(base_path, "distances_common.csv")
 
     turbine = WindTurbineNode(devices, connections)

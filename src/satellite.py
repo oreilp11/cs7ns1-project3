@@ -3,23 +3,49 @@ import socket
 import random
 import time
 import threading
+from flask import Flask, request, jsonify
+import requests
+import threading
+import os
+import sys
+# Replace bob2 imports with bobb
+# ...existing code...
+bobb_protocol_path = os.path.abspath("../../bobb/src/utils/headers/")
+sys.path.append(bobb_protocol_path)
+import necessary_headers as bobb
+import optional_header as bobb_optional
 
-#from bob2_protocol import Bob2Protocol
-from bob2_ipv4 import Bob2Protocol
 from find_shortest_way import find_shortest_path
 
 class Satellite:
     def __init__(self, sat_id, device_list_path, connection_list_path):
         self.device_list_path = device_list_path
         self.connection_list_path = connection_list_path
-        self.protocol = Bob2Protocol()
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
         self.sat_host, self.next_device, self.shortest_path = self.load_network()
         self.name = f"Satellite {sat_id}"
 
-        # self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(self.sat_host)
+        self.app = Flask(f"satellite_{sat_id}")
+
+        @self.app.route('/', methods=['GET'])
+        def receive_data():
+            headers = request.headers
+            bobb_header_hex = headers.get('X-Bobb-Header')
+            bobb_optional_header_hex = headers.get('X-Bobb-Optional-Header')
+            data = request.data
+            print(f"Data received at Satellite {self.sat_id} : {data}")
+
+            # Parse headers using bobb
+            header = bobb.BobbHeaders()
+            header.parse_header(bytes.fromhex(bobb_header_hex))
+
+            opt_header = bobb_optional.BobbOptionalHeaders()
+            opt_header.parse_optional_header(bytes.fromhex(bobb_optional_header_hex))
+
+            # Forward data to the next device
+            threading.Thread(target=self.forward_data, args=(headers,data)).start()
+            return jsonify({"message": f"Satellite {self.sat_id} received data"})
+
         print(f"{self.name} listening on {self.sat_host}")
         print(f"Shortest path to Ground Station: {self.shortest_path}")
         print(f"Next device: {self.next_device}")
@@ -49,98 +75,30 @@ class Satellite:
         jitter = random.uniform(2, 8)        # Additional jitter 2-8ms
         return (base_delay + jitter) / 1000  # Convert to seconds
 
-    def forward_message(self, parsed_message):
+    def forward_data(self, headers, data):
         # Simulate delay
         time.sleep(self.simulate_starlink_delay())
-
         if self.next_device:
             try:
-                # message = self.protocol.build_message(
-                #     message_type=parsed_message["message_type"],
-                #     dest_ipv6="::1",
-                #     dest_port=self.next_device[1],
-                #     source_ipv6="::1",
-                #     source_port=self.sat_host[1],
-                #     sequence_number=0,
-                #     message_content=parsed_message["message_content"]
-                # )
-                message = self.protocol.build_message(
-                    message_type=parsed_message["message_type"],
-                    dest_ipv4=self.next_device[0],
-                    dest_port=self.next_device[1],
-                    source_ipv4=self.sat_host[0],
-                    source_port=self.sat_host[1],
-                    sequence_number=0,
-                    message_content=parsed_message["message_content"]
-                )
-                self.sock.sendto(message, self.next_device)
-                print(f"Forwarded message to {self.next_device} along path {self.shortest_path}")
+                next_ip, next_port = self.next_device
+                # Forward the HTTP request to the next device
+                response = requests.get(f"http://{next_ip}:{next_port}/", headers=headers, data=data,verify=False)
+                print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
             except Exception as e:
-                print(f"Error forwarding to next device: {e}")
+                print(f"Error forwarding data: {e}")
         else:
             print("No next device to forward the message.")
 
-    def start_relay(self, verbose=False):
-        """Start listening for and forwarding messages"""
-        try:
-            while True:
-                try:
-                    print("Waiting for incoming messages...")
-                    message_data, addr = self.sock.recvfrom(4096)
-                    print(f"Received message from {addr}")
-                    if verbose:
-                        print(f"DEBUG: Raw message received: {message_data[:100]}...")  # Print first 100 bytes
-                        print(f"DEBUG: Message length: {len(message_data)} bytes")
-
-                    try:
-                        parsed_message = self.protocol.parse_message(message_data)
-                        if verbose:
-                            print(f"DEBUG: Parsed message: {parsed_message}")
-                        if parsed_message["message_type"] == 2:
-                            print(f"Received ACK from {addr}")
-                            continue
-                        # Send acknowledgment back to the sender immediately
-                        try:
-                            # ack_message = self.protocol.build_message(
-                            #     message_type=2,  # ACK message type
-                            #     dest_ipv6="::1",
-                            #     dest_port=addr[1],
-                            #     source_ipv6="::1",
-                            #     source_port=self.sat_host[1],
-                            #     sequence_number=0,
-                            #     message_content="ACK"
-                            # )
-                            ack_message = self.protocol.build_message(
-                                message_type=2,  # ACK message type
-                                dest_ipv4=addr[0],
-                                dest_port=addr[1],
-                                source_ipv4=self.sat_host[0],
-                                source_port=self.sat_host[1],
-                                sequence_number=0,
-                                message_content="ACK"
-                            )
-                            self.sock.sendto(ack_message, addr)
-                            if verbose:
-                                print(f"DEBUG: Sent ACK to {addr}")
-                        except Exception as e:
-                            print(f"Error sending ACK: {e}")
-
-                        # Handle message forwarding in a separate thread
-                        threading.Thread(target=self.forward_message, args=(parsed_message,)).start()
-                    except ValueError as e:
-                        print(f"Error parsing message: {e}")
-                except Exception as e:
-                    print(f"Error in message handling: {e}")
-                    continue
-
-        except KeyboardInterrupt:
-            print(f"\n{self.name} relay stopped by user")
-        finally:
-            self.sock.close()
+    def start_flask_app(self):
+        threading.Thread(target=self.app.run, kwargs={
+            "host": self.sat_host[0],
+            "port": self.sat_host[1],
+            "use_reloader": False,
+            "debug": False
+        }, daemon=True).start()
 
 if __name__ == "__main__":
-    import sys
-    import os
+
 
     # Usage: python satellite.py <Satellite Name>
     if len(sys.argv) != 2:
@@ -150,9 +108,13 @@ if __name__ == "__main__":
     sat_id = sys.argv[1]
 
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ipv4.csv")
+    devices = os.path.join(base_path, "devices_ip.csv")
     connections = os.path.join(base_path, "distances_common.csv")
 
     satellite = Satellite(sat_id, devices, connections)
-    input(f"Satellite {sat_id} Online. Press any key to start...")
-    satellite.start_relay(verbose=True)
+    satellite.start_flask_app()
+    print(f"Satellite {sat_id} Online.")
+    # don't quit
+    while True:
+        pass
+
