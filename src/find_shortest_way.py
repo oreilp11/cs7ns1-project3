@@ -1,10 +1,9 @@
 import csv
-import os
 import heapq
 
-def find_shortest_path(start_node, end_node, broken_devices=None):
-    base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    print("start_node", start_node)
+def find_shortest_path(connection_list_path, start_node, end_node, broken_devices=None):
+
+    #print("start_node", start_node)
     if broken_devices is None:
         broken_devices = set()
     else:
@@ -16,8 +15,8 @@ def find_shortest_path(start_node, end_node, broken_devices=None):
         return
 
     graph = {}
-    with open(os.path.join(base_path, "distances_common.csv"), 'r') as f:
-        reader = csv.DictReader(f)
+    with open(connection_list_path, 'r') as connections_file:
+        reader = csv.DictReader(connections_file)
         for row in reader:
             device1 = row['id1']
             device2 = row['id2']
