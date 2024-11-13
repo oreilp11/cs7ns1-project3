@@ -216,14 +216,16 @@ if __name__ == "__main__":
 
         turbine = WindTurbineNode(devices, connections)
         turbine.start_flask_app()
-        input("Wind Turbine Online. Press any key to start...")
+        
+        input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")
 
         # Simulation loop
         while True:
             # Send regular status update
             message = turbine.send_status_update()
             time.sleep(5)
+
     except KeyboardInterrupt:
-        print("\nSimulation stopped by user")
+        print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
         turbine.deactivate_device()

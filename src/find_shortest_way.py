@@ -40,7 +40,7 @@ def find_shortest_path(connection_list_path, start_node, end_node, broken_device
             continue
         path = path + [node]
         if node == str(end_node):
-            print(f"Shortest distance: {cost:0.4} km")
+            print(f"Shortest distance: {cost:0.3f} km")
             print("Path:", " -> ".join(path))
             return [int(node) for node in path], cost
         visited.add(node)
