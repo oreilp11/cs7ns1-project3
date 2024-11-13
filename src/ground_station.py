@@ -120,6 +120,6 @@ if __name__ == "__main__":
         while True:
             pass
     except KeyboardInterrupt:
-        print("\nSimulation stopped by user")
+        print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
         ground_station.deactivate_device()

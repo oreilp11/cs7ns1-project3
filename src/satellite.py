@@ -193,7 +193,7 @@ if __name__ == "__main__":
             satellite.update_nearest_satellite()
             time.sleep(5)
     except KeyboardInterrupt:
-        print("\nSimulation stopped by user")
+        print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
         satellite.deactivate_device()
 
