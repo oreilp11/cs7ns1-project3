@@ -2,11 +2,11 @@ import csv
 import random
 import time
 import threading
-from flask import Flask, request, jsonify
 import requests
 import os
 import sys
 
+from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
 
 
@@ -21,7 +21,11 @@ class Satellite:
         self.activate_device()
         self.next_device, self.distance, self.shortest_path = self.load_nearest_satellite()
 
-        self.app = Flask(f"satellite_{sat_id}")
+        self.app = Flask(self.name)
+
+        @self.app.route('/', methods=['GET'])
+        def get_device():
+            return jsonify({"device-type": self.name, "device-id": self.sat_id, "group-id": 8})
 
         @self.app.route('/', methods=['POST'])
         def receive_data():

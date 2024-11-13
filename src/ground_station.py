@@ -3,9 +3,9 @@ import os
 import time
 import json
 import rsa
-from flask import Flask, request, jsonify
 import threading
 
+from flask import Flask, request, jsonify
 
 class GroundStationNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -17,8 +17,11 @@ class GroundStationNode:
 
         self.private_key = self.load_key(private=True)
 
-        self.app = Flask(self.name.replace(" ",""))
+        self.app = Flask(self.name)
 
+        @self.app.route('/', methods=['GET'])
+        def get_device():
+            return jsonify({"device-type": self.name, "device-id": self.gs_id, "group-id": 8})
 
         @self.app.route('/', methods=['POST'])
         def receive_data():

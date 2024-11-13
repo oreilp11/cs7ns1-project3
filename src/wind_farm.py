@@ -5,15 +5,18 @@ import requests
 import csv
 import os
 
+from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
 import rsa
+import threading
 
 
 class WindTurbineNode:
     def __init__(self, device_list_path, connection_list_path):
         self.device_list_path = device_list_path
         self.connection_list_path = connection_list_path
-        self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
+        self.name = "Offshore Windfarm"
+        self.wf_id, self.wf_host = self.load_device_by_name(self.name)
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
         self.activate_device()
 
@@ -21,6 +24,13 @@ class WindTurbineNode:
 
         self.next_satellite, self.distance, self.shortest_path = self.load_nearest_satellite()
         print(self.wf_host, self.shortest_path, self.next_satellite)
+
+        self.app = Flask(self.name)
+
+        @self.app.route('/', methods=['GET'])
+        def get_device():
+            return jsonify({"device-type": self.name, "device-id": self.wf_id, "group-id": 8})
+
         if self.next_satellite is not None:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
         else:
@@ -188,6 +198,14 @@ class WindTurbineNode:
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
         except Exception as e:
             print(f"Error sending status update: {e}")
+    
+    def start_flask_app(self):
+        threading.Thread(target=self.app.run, kwargs={
+            "host": self.wf_host[0],
+            "port": self.wf_host[1],
+            "use_reloader": False,
+            "debug": False
+        }, daemon=True).start()
 
 
 if __name__ == "__main__":
@@ -197,6 +215,7 @@ if __name__ == "__main__":
         connections = os.path.join(base_path, "distances_common.csv")
 
         turbine = WindTurbineNode(devices, connections)
+        turbine.start_flask_app()
         input("Wind Turbine Online. Press any key to start...")
 
         # Simulation loop
