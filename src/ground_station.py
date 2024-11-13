@@ -1,6 +1,8 @@
 import csv
 import os
 import time
+import json
+import rsa
 from flask import Flask, request, jsonify
 import threading
 
@@ -14,12 +16,16 @@ class GroundStationNode:
         self.name = "Ground Station"
         self.gs_id, self.gs_host = self.load_device_by_name(self.name)
         self.activate_device()
+
+        self.private_key = self.load_key(private=True)
+
         self.app = Flask(self.name.replace(" ",""))
 
-        @self.app.route('/', methods=['GET'])
+
+        @self.app.route('/', methods=['POST'])
         def receive_data():
             headers = request.headers
-            data = request.data
+            data = self.decrypt_turbine_data(request.data)
             bobb_header_hex = headers.get('X-Bobb-Header')
             bobb_optional_header_hex = headers.get('X-Bobb-Optional-Header')
 
@@ -67,6 +73,26 @@ class GroundStationNode:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
             device_writer.writerows(devices)
+    
+
+    def decrypt_turbine_data(self, encrypted_message):
+        ### need to start splitting the message up into chunks if message size > 245 bytes
+        encrypted_message = rsa.decrypt(encrypted_message, self.private_key)
+        text = encrypted_message.decode("utf-8")
+        message = json.loads(text)
+        return message
+    
+
+    def load_key(self, private=False):
+        keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
+
+        if private:
+            with open(os.path.join(keypath,'private.pem'), 'r') as keyfile:
+                key = rsa.PrivateKey.load_pkcs1(keyfile.read())
+        else:
+            with open(os.path.join(keypath,'public.pem'), 'r') as keyfile:
+                key = rsa.PublicKey.load_pkcs1(keyfile.read())
+        return key
 
 
     def load_device_by_name(self, device_name):

@@ -1,4 +1,5 @@
 import time
+import json
 import random
 import requests
 import csv
@@ -6,6 +7,7 @@ import os
 
 from find_shortest_way import find_shortest_path
 import protocol.headers as bobb
+import rsa
 
 
 class WindTurbineNode:
@@ -15,6 +17,9 @@ class WindTurbineNode:
         self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
         self.activate_device()
+
+        self.public_key = self.load_key()
+
         self.next_satellite, self.shortest_path = self.load_nearest_satellite()
         print(self.wf_host, self.shortest_path, self.next_satellite)
         if self.next_satellite is not None:
@@ -53,6 +58,18 @@ class WindTurbineNode:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
             device_writer.writerows(devices)
+    
+
+    def load_key(self, private=False):
+        keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
+
+        if private:
+            with open(os.path.join(keypath,'private.pem'), 'r') as keyfile:
+                key = rsa.PrivateKey.load_pkcs1(keyfile.read())
+        else:
+            with open(os.path.join(keypath,'public.pem'), 'r') as keyfile:
+                key = rsa.PublicKey.load_pkcs1(keyfile.read())
+        return key
 
 
     def load_device_by_name(self, device_name):
@@ -129,6 +146,14 @@ class WindTurbineNode:
             "vibration_level": round(random.uniform(0, 1), 3),  # normalized
             "timestamp": time.time()
         }
+    
+
+    def encrypt_turbine_data(self, message: dict):
+        ### need to start splitting the message up into chunks if message size > 245 bytes
+        text = json.dumps(message)
+        utf8_text = text.encode("utf-8")
+        encrypted_message = rsa.encrypt(utf8_text, self.public_key)
+        return encrypted_message
 
 
     def send_status_update(self):
@@ -138,7 +163,8 @@ class WindTurbineNode:
             print("No satellites online. No message sent...")
             return
         turbine_data = self.generate_turbine_data()
-        message_content = str(turbine_data)
+        
+        message_content = self.encrypt_turbine_data(turbine_data)
 
         # Build bobb headers
         header = bobb.BobbHeaders()
@@ -162,10 +188,10 @@ class WindTurbineNode:
             'X-Bobb-Optional-Header': bobb_optional_header_hex
         }
 
-        # Send HTTP GET request to the next satellite
+        # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
-            response = requests.get(url, headers=headers,data=message_content, verify=False)
+            response = requests.post(url, headers=headers, data=message_content, verify=False)
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
         except Exception as e:
