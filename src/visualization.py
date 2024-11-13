@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify
 import update_cluster_positions
 from find_shortest_way import find_shortest_path
-
+import csv
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
 
 @app.route('/')
@@ -11,6 +11,13 @@ def index():
 @app.route('/get_positions')
 def get_positions():
     positions = update_cluster_positions.update_positions()
+    with open('../assets/devices_ip.csv', mode='r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            for pos in positions:
+                if pos['id'] == int(row['id']):
+                    pos['name'] = row['name']
+
     return jsonify(positions)
 
 @app.route('/get_shortest_path')
