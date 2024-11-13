@@ -42,8 +42,11 @@ def find_shortest_path(connection_list_path, start_node, end_node, broken_device
         if node == str(end_node):
             print(f"Shortest distance: {cost:0.4} km")
             print("Path:", " -> ".join(path))
-            return [int(node) for node in path]
+            return [int(node) for node in path], cost
         visited.add(node)
         for neighbor, weight in graph.get(node, []):
             if neighbor not in visited:
                 heapq.heappush(queue, (cost + weight, neighbor, path))
+    
+    # no viable path
+    return None, None

@@ -19,7 +19,7 @@ class Satellite:
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
         self.name, self.sat_host = self.load_device_by_id(self.sat_id)
         self.activate_device()
-        self.next_device, self.shortest_path = self.load_nearest_satellite()
+        self.next_device, self.distance, self.shortest_path = self.load_nearest_satellite()
 
         self.app = Flask(f"satellite_{sat_id}")
 
@@ -96,27 +96,29 @@ class Satellite:
 
     def load_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
         
         if shortest_path is None:
-            return None, None
+            return None, None, None
         
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        return next_sat_host, shortest_path
+        return next_sat_host, next_sat_distance, shortest_path
     
 
     def update_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
             self.next_device = None
             self.shortest_path = None
+            self.distance = None
             return
         
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         self.next_device = next_sat_host
         self.shortest_path = shortest_path
+        self.distance = next_sat_distance
 
 
     def get_active_devices(self):
@@ -133,16 +135,19 @@ class Satellite:
         return active_devices, broken_devices
 
 
-    def simulate_starlink_delay(self):
-        """Simulate StarLink transmission delay with jitter"""
-        base_delay = random.uniform(40, 60)  # Base delay 40-60ms
-        jitter = random.uniform(2, 8)        # Additional jitter 2-8ms
-        return (base_delay + jitter) / 1000  # Convert to seconds
+    def simulate_leo_delay(self):
+        """Simulate LEO transmission delay with jitter"""
+        C = 299_792_458 / 1000.0*1000.0  # kilometres per millisecond
+        base_delay = self.distance / C # milliseconds
+        jitter = random.uniform(2, 8) # milliseconds
+        leo_delay = (base_delay + jitter) / 1000 # seconds
+        print(f"Adding {leo_delay:0.4f}s delay")
+        return leo_delay
 
 
     def forward_data(self, headers, data):
         # Simulate delay
-        time.sleep(self.simulate_starlink_delay())
+        time.sleep(self.simulate_leo_delay())
         if self.next_device:
             try:
                 next_ip, next_port = self.next_device

@@ -19,7 +19,7 @@ class WindTurbineNode:
 
         self.public_key = self.load_key()
 
-        self.next_satellite, self.shortest_path = self.load_nearest_satellite()
+        self.next_satellite, self.distance, self.shortest_path = self.load_nearest_satellite()
         print(self.wf_host, self.shortest_path, self.next_satellite)
         if self.next_satellite is not None:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
@@ -97,27 +97,29 @@ class WindTurbineNode:
 
     def load_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
         
         if shortest_path is None:
-            return None, None
+            return None, None, None
         
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        return next_sat_host, shortest_path
+        return next_sat_host, next_sat_distance, shortest_path
     
 
     def update_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
             self.next_satellite = None
             self.shortest_path = None
+            self.distance = None
             return
         
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         self.next_satellite = next_sat_host
         self.shortest_path = shortest_path
+        self.distance = next_sat_distance
     
 
     def get_active_devices(self):
@@ -153,6 +155,16 @@ class WindTurbineNode:
         utf8_text = text.encode("utf-8")
         encrypted_message = rsa.encrypt(utf8_text, self.public_key)
         return encrypted_message
+    
+
+    def simulate_leo_delay(self):
+        """Simulate LEO transmission delay with jitter"""
+        C = 299_792_458 / 1000.0*1000.0  # kilometres per millisecond
+        base_delay = self.distance / C # milliseconds
+        jitter = random.uniform(2, 8) # milliseconds
+        leo_delay = (base_delay + jitter) / 1000 # seconds
+        print(f"Adding {leo_delay:0.4f}s delay")
+        return leo_delay
 
 
     def send_status_update(self):
@@ -166,7 +178,7 @@ class WindTurbineNode:
         message_content = self.encrypt_turbine_data(turbine_data)
 
         headers = {}
-
+        time.sleep(self.simulate_leo_delay())
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
