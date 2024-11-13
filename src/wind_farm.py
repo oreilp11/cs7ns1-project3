@@ -6,7 +6,6 @@ import csv
 import os
 
 from find_shortest_way import find_shortest_path
-import protocol.headers as bobb
 import rsa
 
 
@@ -166,32 +165,13 @@ class WindTurbineNode:
         
         message_content = self.encrypt_turbine_data(turbine_data)
 
-        # Build bobb headers
-        header = bobb.BobbHeaders()
-        header.source_ipv4 = self.wf_host[0]
-        header.source_port = self.wf_host[1]
-        header.dest_ipv4 = self.next_satellite[0]
-        header.dest_port = self.next_satellite[1]
-        header.sequence_number = 0
-        header.message_type = 0
-
-        # Build optional headers
-        opt_header = bobb.BobbOptionalHeaders()
-
-        # Serialize headers to hex
-        bobb_header_hex = header.build_header().hex()
-        bobb_optional_header_hex = opt_header.build_optional_header().hex()
-
-        # Prepare headers for the HTTP request
-        headers = {
-            'X-Bobb-Header': bobb_header_hex,
-            'X-Bobb-Optional-Header': bobb_optional_header_hex
-        }
+        headers = {}
 
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
             response = requests.post(url, headers=headers, data=message_content, verify=False)
+            print(response.headers)
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
         except Exception as e:

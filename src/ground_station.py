@@ -6,8 +6,6 @@ import rsa
 from flask import Flask, request, jsonify
 import threading
 
-import protocol.headers as bobb
-
 
 class GroundStationNode:
     def __init__(self, device_list_path, connection_list_path):
@@ -24,21 +22,11 @@ class GroundStationNode:
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
-            headers = request.headers
             data = self.decrypt_turbine_data(request.data)
-            bobb_header_hex = headers.get('X-Bobb-Header')
-            bobb_optional_header_hex = headers.get('X-Bobb-Optional-Header')
 
-            # Parse headers using bobb
-            header = bobb.BobbHeaders()
-            header.parse_header(bytes.fromhex(bobb_header_hex))
-
-            opt_header = bobb.BobbOptionalHeaders()
-            opt_header.parse_optional_header(bytes.fromhex(bobb_optional_header_hex))
-
-            end_to_end_delay = time.time() - opt_header.timestamp
+            end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
-            print(f"Data received at Ground Station from {header.source_ipv6}")
+            print(f"Data received at Ground Station")
             print(f"\033[92mData: {data}\033[0m")
             return jsonify({"message": "Data received at Ground Station"})
 

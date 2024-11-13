@@ -7,7 +7,6 @@ import requests
 import os
 import sys
 
-import protocol.headers as bobb
 from find_shortest_way import find_shortest_path
 
 
@@ -27,17 +26,8 @@ class Satellite:
         @self.app.route('/', methods=['POST'])
         def receive_data():
             headers = request.headers
-            bobb_header_hex = headers.get('X-Bobb-Header')
-            bobb_optional_header_hex = headers.get('X-Bobb-Optional-Header')
             data = request.data
             print(f"Data received at Satellite {self.sat_id} : {data}")
-
-            # Parse headers using bobb
-            header = bobb.BobbHeaders()
-            header.parse_header(bytes.fromhex(bobb_header_hex))
-
-            opt_header = bobb.BobbOptionalHeaders()
-            opt_header.parse_optional_header(bytes.fromhex(bobb_optional_header_hex))
 
             # Forward data to the next device
             threading.Thread(target=self.forward_data, args=(headers,data)).start()
