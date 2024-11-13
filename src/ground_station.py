@@ -31,6 +31,28 @@ class GroundStationNode:
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
             print(f"Data received at Ground Station")
             print(f"\033[92mData: {data}\033[0m")
+
+            # Define threshold values
+            thresholds = {
+                "wind_speed": 5.0,       # Example threshold for wind speed in m/s
+                "power_output": 1200.0,   # Example threshold for power output in kW
+                "rotor_speed": 10.0,      # Example threshold for rotor speed in rpm
+                "blade_pitch": 75.0,      # Example threshold for blade pitch in degrees
+                "nacelle_orientation": 300.0,  # Example threshold for nacelle orientation in degrees
+                "vibration_level": 0.8    # Example threshold for vibration level (normalized)
+            }
+
+            # Check if any parameter exceeds the threshold
+            alerts = {}
+            for param, threshold in thresholds.items():
+                if param in data and data[param] > threshold:
+                    alerts[param] = f"{data[param]} exceeds threshold {threshold}"
+
+            # Return the appropriate response based on checks
+            if not alerts:
+                print(f'"message": "OK - All parameters within safe thresholds"')
+            else:
+                print(f'"message": "Alert - Parameters exceeded thresholds", "alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
 
