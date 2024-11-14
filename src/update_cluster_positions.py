@@ -2,9 +2,12 @@ import math
 from datetime import datetime
 import numpy as np
 import pandas as pd
+import os
+
 
 def read_static_positions():
-    df = pd.read_csv('../assets/device_positions.csv')
+    csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "device_positions.csv")
+    df = pd.read_csv(csv_path)
     static_positions = df[df['id'].isin([-1, 0])].to_dict('records')
     ground_station = next(pos for pos in static_positions if pos['id'] == -1)
     windfarm = next(pos for pos in static_positions if pos['id'] == 0)
