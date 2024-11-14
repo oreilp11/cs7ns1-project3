@@ -6,21 +6,36 @@ import rsa
 import threading
 
 from flask import Flask, request, jsonify
+import update_cluster_positions
+
 
 class GroundStationNode:
-    def __init__(self, device_list_path):
+    def __init__(self, device_list_path, clusters_positions):
         self.device_list_path = device_list_path
         self.name = "Ground Station"
         self.gs_id, self.gs_host = self.load_device_by_name(self.name)
-        self.activate_device()
 
+        self.latitude, self.longitude, self.altitude = None, None, None
+        self.clusters_positions = clusters_positions
+        for cluster in clusters_positions: 
+            if cluster['id'] == self.gs_id:
+                self.latitude, self.longitude, self.altitude = cluster['lat'], cluster['long'], cluster['alt']
+
+        self.activate_device()
         self.private_key = self.load_key(private=True)
 
         self.app = Flask(self.name)
 
         @self.app.route('/', methods=['GET'])
         def get_device():
-            return jsonify({"device-type": self.name, "device-id": self.gs_id, "group-id": 8})
+            return jsonify({
+                "device-type": 2,
+                "device-id": self.gs_id, 
+                "group-id": 8, 
+                "latitude": self.latitude,
+                "longitude": self.longitude,
+                "altitude": self.altitude
+            })
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
@@ -131,8 +146,9 @@ class GroundStationNode:
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
     devices = os.path.join(base_path, "devices_ip.csv")
+    clusters_positions = update_cluster_positions.calculate_cluster_positions()
 
-    ground_station = GroundStationNode(devices)
+    ground_station = GroundStationNode(devices, clusters_positions)
     ground_station.start_flask_app()
     print("Ground Station Online.")
 

@@ -15,12 +15,17 @@ import update_cluster_positions
 class WindTurbineNode:
     def __init__(self, device_list_path, clusters_positions):
         self.device_list_path = device_list_path
-        self.clusters_positions = clusters_positions
         self.name = "Offshore Windfarm"
         self.wf_id, self.wf_host = self.load_device_by_name(self.name)
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
+        
+        self.latitude, self.longitude, self.altitude = None, None, None
+        self.clusters_positions = clusters_positions
+        for cluster in clusters_positions: 
+            if cluster['id'] == self.wf_id:
+                self.latitude, self.longitude, self.altitude = cluster['lat'], cluster['long'], cluster['alt']
+        
         self.activate_device()
-
         self.public_key = self.load_key()
 
         self.next_satellite, self.distance, self.shortest_path = self.load_nearest_satellite()
@@ -30,7 +35,14 @@ class WindTurbineNode:
 
         @self.app.route('/', methods=['GET'])
         def get_device():
-            return jsonify({"device-type": self.name, "device-id": self.wf_id, "group-id": 8})
+            return jsonify({
+                "device-type": 0,
+                "device-id": self.wf_id, 
+                "group-id": 8, 
+                "latitude": self.latitude,
+                "longitude": self.longitude,
+                "altitude": self.altitude
+            })
 
         if self.next_satellite is not None:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")

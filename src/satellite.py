@@ -10,14 +10,21 @@ from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
 import update_cluster_positions
 
+
 class Satellite:
     def __init__(self, sat_id, device_list_path, clusters_positions):
         self.device_list_path = device_list_path
-        self.clusters_positions = clusters_positions
         self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
         self.name, self.sat_host = self.load_device_by_id(self.sat_id)
+        
+        self.latitude, self.longitude, self.altitude = None, None, None
+        self.clusters_positions = clusters_positions
+        for cluster in clusters_positions: 
+            if cluster['id'] == self.sat_id:
+                self.latitude, self.longitude, self.altitude = cluster['lat'], cluster['long'], cluster['alt']
+        
         self.activate_device()
         self.next_device, self.distance, self.shortest_path = self.load_nearest_satellite()
 
@@ -25,7 +32,14 @@ class Satellite:
 
         @self.app.route('/', methods=['GET'])
         def get_device():
-            return jsonify({"device-type": self.name, "device-id": self.sat_id, "group-id": 8})
+            return jsonify({
+                "device-type": 1,
+                "device-id": self.wf_id, 
+                "group-id": 8, 
+                "latitude": self.latitude,
+                "longitude": self.longitude,
+                "altitude": self.altitude
+            })
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
