@@ -11,6 +11,56 @@ __Group Members__
 
 This project simulates a network of wind turbines, ground stations, and satellites. The wind turbines send status updates to the nearest satellite, which then forwards the data to the ground station.
 
+### Protocol Structure
+Uses HTTP 1.1 as a base, composed of two endpoints as follows:
+
+#### Endpoint 1: Check if Device is Online
+```
+GET / HTTP/1.1
+```
+No headers necessary, optional/custom headers are permitted
+
+Returns the following JSON:
+```
+{
+    "device-type": int,
+    "device-id": int,
+    "group-id": int,
+    "latitude": float,
+    "longitude": float,
+    "altitude": float,
+}
+```
+
+The following is a breakdown of the three valid codes for `device-type`:
+- 0: Data Collection Node
+- 1: Satellite Node
+- 2: End Station Node
+
+`group-id` should be the id of your group.
+
+`device-id` should be unique in the network of your group's devices, no need for it to be globally unique within all groups using this protocol as `group-id` can be used to resolve conflicts
+
+If not dynamically updating satellite position, set `latitude` & `longitude` to be a random real location reasonably close in proximity to your end station (ideally not too far from Ireland/UK but this will be usecase dependant). Set `altitude` to be somewhat realistic for the LEO context
+
+
+#### Endpoint 2: Forward Data Through the Network
+```
+POST / HTTP/1.1
+```
+No headers necessary, optional/custom headers are permitted
+payload is sent in the body of this request
+
+Returns the following JSON:
+```json
+{
+    "message": str,
+}
+```
+
+`message` content is not required to be in any specific format
+optional fields are permitted
+
 ### Project Structure
 
 - wind_farm.py : Simulates wind turbines sending status updates.
@@ -34,7 +84,7 @@ This project simulates a network of wind turbines, ground stations, and satellit
     python src/satellite.py <Satellite ID>
     ```
 
-    with `<Satellite ID>` being an integer from 1 to 5.
+    with `<Satellite ID>` being an integer from 1 to 10.
 
 #### Wind Farm
 
@@ -52,38 +102,6 @@ Wind turbines generate status updates and send them to the nearest satellite usi
 #### Satellite to Ground Station
 
 Satellites receive data from wind turbines, add a simulated delay, and forward the data to the next device (either another satellite or the ground station) using HTTP GET requests.
-
-### Example Request
-
-**Wind Turbine to Satellite**:
-```plaintext
-GET / HTTP/1.1
-Host: <Satellite IP>:<Satellite Port>
-X-Bobb-Header: <hexadecimal Bobb header>
-X-Bobb-Optional-Header: <hexadecimal Bobb optional header>
-```
-
-**Satellite to Ground Station**:
-```plaintext
-GET / HTTP/1.1
-Host: <Ground Station IP>:<Ground Station Port>
-X-Bobb-Header: <hexadecimal Bobb header>
-X-Bobb-Optional-Header: <hexadecimal Bobb optional header>
-```
-
-### Custom Headers
-
-- **X-Bobb-Header**: Contains protocol information such as version, message type, source and destination IPs and ports, sequence number, and timestamp.
-- **X-Bobb-Optional-Header**: Contains optional information such as timestamp, hop count, priority, and encryption algorithm.
-
-### Example Response
-
-**Ground Station Response**:
-```json
-{
-  "message": "Data received at Ground Station"
-}
-```
 
 ### Notes
 
