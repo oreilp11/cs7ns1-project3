@@ -66,18 +66,3 @@ def calculate_cluster_positions():
 
     # Return all positions including ground station and windfarm
     return [ground_station, windfarm] + clusters
-
-# Global variable to store current positions
-ground_station, windfarm = read_static_positions()
-current_positions = [ground_station, windfarm]
-
-def update_positions():
-    global current_positions
-    current_positions = calculate_cluster_positions()
-    return current_positions
-
-def get_current_positions():
-    return current_positions
-
-if __name__ == "__main__":
-    update_positions()

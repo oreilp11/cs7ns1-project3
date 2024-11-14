@@ -71,6 +71,6 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
         for neighbor, weight in graph.get(node, []):
             if neighbor not in visited:
                 heapq.heappush(queue, (cost + weight, neighbor, path))
-    
+
     # no viable path
     return None, None

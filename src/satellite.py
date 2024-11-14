@@ -8,12 +8,12 @@ import sys
 
 from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
-
+import update_cluster_positions
 
 class Satellite:
-    def __init__(self, sat_id, device_list_path, connection_list_path):
+    def __init__(self, sat_id, device_list_path, clusters_positions):
         self.device_list_path = device_list_path
-        self.connection_list_path = connection_list_path
+        self.clusters_positions = clusters_positions
         self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
         self.sat_id = int(sat_id)  # Ensure sat_id is an integer
@@ -40,7 +40,7 @@ class Satellite:
         print(f"{self.name} listening on {self.sat_host}")
         print(f"Shortest path to Ground Station: {self.shortest_path}")
         print(f"Next device: {self.next_device}")
-    
+
 
     def activate_device(self):
         with open(self.device_list_path, 'r', newline='') as device_file:
@@ -51,7 +51,7 @@ class Satellite:
         for device in devices:
             if int(device["id"]) == self.sat_id:
                 device['status'] = 1
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
@@ -67,12 +67,12 @@ class Satellite:
         for device in devices:
             if int(device["id"]) == self.sat_id:
                 device['status'] = 0
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
             device_writer.writerows(devices)
-    
+
 
     def load_device_by_name(self, device_name):
         device_host = ()
@@ -84,7 +84,7 @@ class Satellite:
                     device_host = (device['ip'], int(device['port']))
                     device_id = int(device["id"])
         return device_id, device_host
-    
+
 
     def load_device_by_id(self, device_id):
         device_host = ()
@@ -96,29 +96,29 @@ class Satellite:
                     device_host = (device['ip'], int(device['port']))
                     device_name = device["name"]
         return device_name, device_host
-    
+
 
     def load_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
-        
+        shortest_path, next_sat_distance = find_shortest_path(self.clusters_positions, self.sat_id, self.gs_id, broken_devices)
+
         if shortest_path is None:
             return None, None, None
-        
+
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         return next_sat_host, next_sat_distance, shortest_path
-    
+
 
     def update_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.sat_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.clusters_positions, self.sat_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
             self.next_device = None
             self.shortest_path = None
             self.distance = None
             return
-        
+
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         self.next_device = next_sat_host
         self.shortest_path = shortest_path
@@ -184,9 +184,9 @@ if __name__ == "__main__":
 
         base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
         devices = os.path.join(base_path, "devices_ip.csv")
-        connections = os.path.join(base_path, "distances_common.csv")
+        clusters_positions = update_cluster_positions.calculate_cluster_positions()
 
-        satellite = Satellite(sat_id, devices, connections)
+        satellite = Satellite(sat_id, devices, clusters_positions)
         satellite.start_flask_app()
         print(f"Satellite {sat_id} Online.")
         while True:

@@ -10,8 +10,9 @@ def index():
 
 @app.route('/get_positions')
 def get_positions():
-    positions = update_cluster_positions.update_positions()
+    positions = update_cluster_positions.calculate_cluster_positions()
     with open('../assets/devices_ip.csv', mode='r') as file:
+        # add name for each position
         reader = csv.DictReader(file)
         for row in reader:
             for pos in positions:
@@ -22,8 +23,8 @@ def get_positions():
 
 @app.route('/get_shortest_path')
 def get_shortest_path():
-    positions = update_cluster_positions.get_current_positions()
-    path_nodes = find_shortest_path(positions, 0, -1)
+    positions = update_cluster_positions.calculate_cluster_positions()
+    path_nodes = find_shortest_path(positions, 0, -1)[0]
     if not path_nodes:
         return jsonify([])
 
