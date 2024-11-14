@@ -9,12 +9,13 @@ from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
 import rsa
 import threading
+import update_cluster_positions
 
 
 class WindTurbineNode:
-    def __init__(self, device_list_path, connection_list_path):
+    def __init__(self, device_list_path, clusters_positions):
         self.device_list_path = device_list_path
-        self.connection_list_path = connection_list_path
+        self.clusters_positions = clusters_positions
         self.name = "Offshore Windfarm"
         self.wf_id, self.wf_host = self.load_device_by_name(self.name)
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
@@ -35,7 +36,7 @@ class WindTurbineNode:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
         else:
             print("No satellites online yet.")
-    
+
 
     def activate_device(self):
         with open(self.device_list_path, 'r', newline='') as device_file:
@@ -46,7 +47,7 @@ class WindTurbineNode:
         for device in devices:
             if int(device["id"]) == self.wf_id:
                 device['status'] = 1
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
@@ -62,12 +63,12 @@ class WindTurbineNode:
         for device in devices:
             if int(device["id"]) == self.wf_id:
                 device['status'] = 0
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
             device_writer.writerows(devices)
-    
+
 
     def load_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
@@ -91,7 +92,7 @@ class WindTurbineNode:
                     device_host = (device['ip'], int(device['port']))
                     device_id = int(device["id"])
         return device_id, device_host
-    
+
 
     def load_device_by_id(self, device_id):
         device_host = ()
@@ -107,30 +108,30 @@ class WindTurbineNode:
 
     def load_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
-        
+        shortest_path, next_sat_distance = find_shortest_path(self.clusters_positions, self.wf_id, self.gs_id, broken_devices)
+
         if shortest_path is None:
             return None, None, None
-        
+
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         return next_sat_host, next_sat_distance, shortest_path
-    
+
 
     def update_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.connection_list_path, self.wf_id, self.gs_id, broken_devices)
+        shortest_path, next_sat_distance = find_shortest_path(self.clusters_positions, self.wf_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
             self.next_satellite = None
             self.shortest_path = None
             self.distance = None
             return
-        
+
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
         self.next_satellite = next_sat_host
         self.shortest_path = shortest_path
         self.distance = next_sat_distance
-    
+
 
     def get_active_devices(self):
         active_devices = []
@@ -157,7 +158,7 @@ class WindTurbineNode:
             "vibration_level": round(random.uniform(0, 1), 3),  # normalized
             "timestamp": time.time()
         }
-    
+
 
     def encrypt_turbine_data(self, message: dict):
         ### need to start splitting the message up into chunks if message size > 245 bytes
@@ -165,7 +166,7 @@ class WindTurbineNode:
         utf8_text = text.encode("utf-8")
         encrypted_message = rsa.encrypt(utf8_text, self.public_key)
         return encrypted_message
-    
+
 
     def simulate_leo_delay(self):
         """Simulate LEO transmission delay with jitter"""
@@ -184,7 +185,7 @@ class WindTurbineNode:
             print("No satellites online. No message sent...")
             return
         turbine_data = self.generate_turbine_data()
-        
+
         message_content = self.encrypt_turbine_data(turbine_data)
 
         headers = {}
@@ -198,7 +199,7 @@ class WindTurbineNode:
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
         except Exception as e:
             print(f"Error sending status update: {e}")
-    
+
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
             "host": self.wf_host[0],
@@ -212,9 +213,9 @@ if __name__ == "__main__":
     try:
         base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
         devices = os.path.join(base_path, "devices_ip.csv")
-        connections = os.path.join(base_path, "distances_common.csv")
+        clusters_positions = update_cluster_positions.calculate_cluster_positions()
 
-        turbine = WindTurbineNode(devices, connections)
+        turbine = WindTurbineNode(devices, clusters_positions)
         turbine.start_flask_app()
         
         input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")

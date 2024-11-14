@@ -8,9 +8,8 @@ import threading
 from flask import Flask, request, jsonify
 
 class GroundStationNode:
-    def __init__(self, device_list_path, connection_list_path):
+    def __init__(self, device_list_path):
         self.device_list_path = device_list_path
-        self.connection_list_path = connection_list_path
         self.name = "Ground Station"
         self.gs_id, self.gs_host = self.load_device_by_name(self.name)
         self.activate_device()
@@ -65,7 +64,7 @@ class GroundStationNode:
         for device in devices:
             if int(device["id"]) == self.gs_id:
                 device['status'] = 1
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
@@ -81,12 +80,12 @@ class GroundStationNode:
         for device in devices:
             if int(device["id"]) == self.gs_id:
                 device['status'] = 0
-        
+
         with open(self.device_list_path, 'w', newline='') as device_file:
             device_writer = csv.DictWriter(device_file, fields)
             device_writer.writeheader()
             device_writer.writerows(devices)
-    
+
 
     def decrypt_turbine_data(self, encrypted_message):
         ### need to start splitting the message up into chunks if message size > 245 bytes
@@ -94,7 +93,7 @@ class GroundStationNode:
         text = encrypted_message.decode("utf-8")
         message = json.loads(text)
         return message
-    
+
 
     def load_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
@@ -132,9 +131,8 @@ class GroundStationNode:
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
     devices = os.path.join(base_path, "devices_ip.csv")
-    connections = os.path.join(base_path, "distances_common.csv")
 
-    ground_station = GroundStationNode(devices, connections)
+    ground_station = GroundStationNode(devices)
     ground_station.start_flask_app()
     print("Ground Station Online.")
 
