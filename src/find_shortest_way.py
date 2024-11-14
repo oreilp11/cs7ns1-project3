@@ -45,7 +45,7 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
                 if (dev1 in ['-1', '0'] and dev2 in ['-1', '0']):
                     can_connect = False
                 # Rule 2: 0 & -1 can only connect to satellites within 300km
-                elif (dev1 in ['-1', '0'] and distance > 500) or (dev2 in ['-1', '0'] and distance > 500):
+                elif (dev1 in ['-1', '0'] and distance > 600) or (dev2 in ['-1', '0'] and distance > 600):
                     can_connect = False
                 # Rule 3: Satellites can connect to each other without distance limits
                 elif pos1['alt'] > 0 and pos2['alt'] > 0:

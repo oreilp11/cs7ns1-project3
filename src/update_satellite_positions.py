@@ -26,8 +26,8 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return R * c
 
-def calculate_cluster_positions():
-    n_clusters = 10
+def calculate_satellite_positions():
+    n_satellites = 10
     ground_station, windfarm = read_static_positions()
 
     # Calculate middle point
@@ -38,13 +38,13 @@ def calculate_cluster_positions():
     now = datetime.now()
     time_factor = (now.minute % 3) * 60 + now.second
 
-    # Parameters for cluster positioning
+    # Parameters for satellite positioning
     altitude = 500  # km
-    clusters = []
+    satellites = []
 
-    for i in range(n_clusters):
-        cluster_id = i + 1
-        np.random.seed(cluster_id)
+    for i in range(n_satellites):
+        satellite_id = i + 1
+        np.random.seed(satellite_id)
         start_radius = 750 / 111  # Start from ~750 km from the center
 
         # Find two random points on the circle
@@ -60,12 +60,12 @@ def calculate_cluster_positions():
         new_lat = point1_lat + t * (point2_lat - point1_lat)
         new_long = point1_long + t * (point2_long - point1_long)
 
-        clusters.append({
-            'id': cluster_id,
+        satellites.append({
+            'id': satellite_id,
             'long': new_long,
             'lat': new_lat,
             'alt': altitude
         })
 
     # Return all positions including ground station and windfarm
-    return [ground_station, windfarm] + clusters
+    return [ground_station, windfarm] + satellites

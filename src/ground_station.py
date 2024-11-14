@@ -6,20 +6,20 @@ import rsa
 import threading
 
 from flask import Flask, request, jsonify
-import update_cluster_positions
+import update_satellite_positions
 
 
 class GroundStationNode:
-    def __init__(self, device_list_path, clusters_positions):
+    def __init__(self, device_list_path, satellites_positions):
         self.device_list_path = device_list_path
         self.name = "Ground Station"
         self.gs_id, self.gs_host = self.load_device_by_name(self.name)
 
         self.latitude, self.longitude, self.altitude = None, None, None
-        self.clusters_positions = clusters_positions
-        for cluster in clusters_positions: 
-            if cluster['id'] == self.gs_id:
-                self.latitude, self.longitude, self.altitude = cluster['lat'], cluster['long'], cluster['alt']
+        self.satellites_positions = satellites_positions
+        for satellite in satellites_positions:
+            if satellite['id'] == self.gs_id:
+                self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
 
         self.activate_device()
         self.private_key = self.load_key(private=True)
@@ -30,8 +30,8 @@ class GroundStationNode:
         def get_device():
             return jsonify({
                 "device-type": 2,
-                "device-id": self.gs_id, 
-                "group-id": 8, 
+                "device-id": self.gs_id,
+                "group-id": 8,
                 "latitude": self.latitude,
                 "longitude": self.longitude,
                 "altitude": self.altitude
@@ -146,9 +146,9 @@ class GroundStationNode:
 if __name__ == "__main__":
     base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
     devices = os.path.join(base_path, "devices_ip.csv")
-    clusters_positions = update_cluster_positions.calculate_cluster_positions()
+    satellites_positions = update_satellite_positions.calculate_satellite_positions()
 
-    ground_station = GroundStationNode(devices, clusters_positions)
+    ground_station = GroundStationNode(devices, satellites_positions)
     ground_station.start_flask_app()
     print("Ground Station Online.")
 
