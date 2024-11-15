@@ -195,6 +195,21 @@ class Satellite:
             print(f"Error forwarding data: {e}")
 
 
+        # Simulate delay for secondary path
+        time.sleep(self.simulate_leo_delay(self.second_distance))
+
+        if not self.second_next_device:
+            print("No second next device to forward the message.")
+            return
+
+        try:
+            second_next_ip, second_next_port = self.second_next_device
+            # Forward the HTTP request to the second next device
+            response = requests.post(f"http://{second_next_ip}:{second_next_port}/", headers=headers, data=data, verify=False)
+            print(f"Forwarded data to {second_next_ip}:{second_next_port}, response: {response.status_code}")
+        except Exception as e:
+            print(f"Error forwarding data: {e}")
+
 
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
