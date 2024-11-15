@@ -23,6 +23,7 @@ class GroundStationNode:
 
         self.activate_device()
         self.private_key = self.load_key(private=True)
+        self.received_uids = set()
 
         self.app = Flask(self.name)
 
@@ -40,6 +41,12 @@ class GroundStationNode:
         @self.app.route('/', methods=['POST'])
         def receive_data():
             data = self.decrypt_turbine_data(request.data)
+
+            if data['uid'] in self.received_uids:
+                print(f"Redundant data received with UID: {data['uid']}. Discarding...")
+                return jsonify({"message": "Redundant data discarded"})
+
+            self.received_uids.add(data['uid'])
 
             end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")

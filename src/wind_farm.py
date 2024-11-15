@@ -4,6 +4,7 @@ import random
 import requests
 import csv
 import os
+import uuid
 
 from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
@@ -137,7 +138,8 @@ class WindTurbineNode:
                 "wind_speed": round(wind_speed, 2),
                 "power_output": round(power_output / 1000, 2),  # Convert to kW
                 "timestamp": time.time(),
-                "turbine_id": self.wf_id
+                "turbine_id": self.wf_id,
+                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
             }
 
         except Exception as e:
@@ -149,7 +151,8 @@ class WindTurbineNode:
                 "wind_speed": round(random.uniform(0, 25), 2),
                 "power_output": round(random.uniform(0, 5000), 2),
                 "timestamp": time.time(),
-                "turbine_id": self.wf_id
+                "turbine_id": self.wf_id,
+                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
             }
 
 
