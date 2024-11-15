@@ -78,8 +78,9 @@ class WindTurbineNode:
             print("wind speed", wind_speed)
             pressure = (current['surface_pressure'] * 100) + random.uniform(-50, 50)  # ±50 Pa jitter
 
-            # Ensure wind speed doesn't go below 0
+            # Ensure non-zero physical variables don't go below 0
             wind_speed = max(0, wind_speed)
+            pressure = max(0, pressure)
 
             columns = pd.MultiIndex.from_tuples([
                 ('wind_speed', 10),
