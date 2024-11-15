@@ -177,8 +177,8 @@ class Satellite:
 
 
     def forward_data(self, headers, data):
-        # Simulate delay
-        time.sleep(self.simulate_leo_delay())
+        # Simulate delay for primary path
+        time.sleep(self.simulate_leo_delay(self.distance))
 
         if 'X-Destination-ID' in headers:
             print(f"\n-----\nDestination ID: {headers['X-Destination-ID']}\n-----\n")
@@ -195,16 +195,6 @@ class Satellite:
         except Exception as e:
             print(f"Error forwarding data: {e}")
 
-        if self.next_device:
-            try:
-                next_ip, next_port = self.next_device
-                # Forward the HTTP request to the next device
-                response = requests.post(f"http://{next_ip}:{next_port}/", headers=headers, data=data, verify=False)
-                print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
-            except Exception as e:
-                print(f"Error forwarding data: {e}")
-        else:
-            print("No next device to forward the message.")
 
 
     def start_flask_app(self):

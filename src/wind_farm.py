@@ -279,8 +279,11 @@ class WindTurbineNode:
 
         message_content = self.encrypt_turbine_data(turbine_data)
 
-        headers = {}
-        time.sleep(self.simulate_leo_delay())
+        headers = {
+            'X-Destination-ID': str(self.gs_id)
+        }
+
+        time.sleep(self.simulate_leo_delay(self.distance))
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
