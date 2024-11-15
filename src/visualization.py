@@ -2,7 +2,12 @@ from flask import Flask, render_template, jsonify
 import update_satellite_positions
 from find_shortest_way import find_shortest_path
 import csv
+from wind_farm import WindTurbineNode
+
 app = Flask(__name__, template_folder='../templates', static_folder='../static')
+
+# Initialize WindTurbineNode to access generate_turbine_data
+turbine_node = WindTurbineNode('../assets/devices_ip.csv', update_satellite_positions.calculate_satellite_positions())
 
 @app.route('/')
 def index():
@@ -37,6 +42,15 @@ def get_shortest_path():
         })
 
     return jsonify(path_coordinates)
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/get_turbine_data')
+def get_turbine_data():
+    data = turbine_node.generate_turbine_data()
+    return jsonify(data)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
