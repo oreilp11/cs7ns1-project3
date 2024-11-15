@@ -11,6 +11,9 @@ import rsa
 import threading
 import update_satellite_positions
 
+import pandas as pd
+from windpowerlib import ModelChain, WindTurbine
+import datetime
 
 class WindTurbineNode:
     def __init__(self, device_list_path, satellites_positions):
@@ -19,11 +22,19 @@ class WindTurbineNode:
         self.wf_id, self.wf_host = self.load_device_by_name(self.name)
         self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
 
+        # Get turbine position from satellites_positions
         self.latitude, self.longitude, self.altitude = None, None, None
         self.satellites_positions = satellites_positions
         for satellite in satellites_positions:
             if satellite['id'] == self.wf_id:
                 self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
+
+        # Initialize Enercon E-126 wind turbine
+        self.turbine_data = {
+            'turbine_type': 'E-126/7500',  # Enercon E-126/7500 (7.5 MW)
+            'hub_height': 135  # hub height in m
+        }
+        self.wind_turbine = WindTurbine(**self.turbine_data)
 
         self.activate_device()
         self.public_key = self.load_key()
@@ -48,6 +59,96 @@ class WindTurbineNode:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
         else:
             print("No satellites online yet.")
+
+
+    def get_weather_data(self):
+        """Get real weather data from Open-Meteo API with added jitter for realism"""
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={self.latitude}&longitude={self.longitude}&current=temperature_2m,surface_pressure,wind_speed_10m"
+
+        try:
+            response = requests.get(url)
+            data = response.json()
+            current = data['current']
+            print(current)
+
+            # Get current weather data with small random variations
+            temperature = current['temperature_2m'] + random.uniform(-0.5, 0.5)  # ±0.5°C jitter
+            wind_speed = (current['wind_speed_10m'] / 3.6) + random.uniform(-0.3, 0.3)  # ±0.3 m/s jitter
+            print("real wind speed", current['wind_speed_10m']/3.6)
+            print("wind speed", wind_speed)
+            pressure = (current['surface_pressure'] * 100) + random.uniform(-50, 50)  # ±50 Pa jitter
+
+            # Ensure non-zero physical variables don't go below 0
+            wind_speed = max(0, wind_speed)
+            pressure = max(0, pressure)
+
+            columns = pd.MultiIndex.from_tuples([
+                ('wind_speed', 10),
+                ('temperature', 2),
+                ('pressure', 0),
+                ('roughness_length', 0)
+            ])
+
+            # Roughness length for open sea (m): https://en.wikipedia.org/wiki/Roughness_length
+            roughness = 0.0002
+
+            data = [[
+                wind_speed,
+                temperature + 273.15,  # Convert to Kelvin
+                pressure,
+                roughness
+            ]]
+
+            weather_df = pd.DataFrame(data, columns=columns)
+            weather_df.index = pd.DatetimeIndex([datetime.datetime.now()])
+
+            return weather_df
+
+        except Exception as e:
+            print(f"Weather API error: {e}")
+            return None
+
+    def generate_turbine_data(self):
+        """Simulate wind turbine sensor data using windpowerlib"""
+        try:
+            # Get weather data
+            weather_data = self.get_weather_data()
+            if weather_data is None:
+                raise Exception("No weather data available")
+
+            print(weather_data)
+
+            # Initialize ModelChain
+            modelchain = ModelChain(self.wind_turbine)
+
+            # Run model with weather data
+            modelchain.run_model(weather_data)
+
+            power_output = float(modelchain.power_output.iloc[0])
+
+            # Properly extract scalar values from weather data and convert to float
+            wind_speed = float(weather_data[('wind_speed', 10)].iloc[0])
+            temperature = float(weather_data[('temperature', 2)].iloc[0])
+            pressure = float(weather_data[('pressure', 0)].iloc[0])
+
+            return {
+                "temperature": round(temperature-273.15, 2),
+                "pressure": round(pressure, 2),
+                "wind_speed": round(wind_speed, 2),
+                "power_output": round(power_output / 1000, 2),  # Convert to kW
+                "timestamp": time.time()
+            }
+
+        except Exception as e:
+            print(f"Error generating turbine data: {e}")
+            # Fallback to random data if simulation fails
+            return {
+                "temperature": round(random.uniform(-10, 40), 2),
+                "pressure": round(random.uniform(900, 1100), 2),
+                "wind_speed": round(random.uniform(0, 25), 2),
+                "power_output": round(random.uniform(0, 5000), 2),
+                "timestamp": time.time()
+            }
 
 
     def activate_device(self):
@@ -157,19 +258,6 @@ class WindTurbineNode:
                     broken_devices.append(device['id'])
 
         return active_devices, broken_devices
-
-
-    def generate_turbine_data(self):
-        """Simulate wind turbine sensor data"""
-        return {
-            "wind_speed": round(random.uniform(0, 25), 2),  # m/s
-            "power_output": round(random.uniform(0, 5000), 2),  # kW
-            "rotor_speed": round(random.uniform(5, 15), 2),  # rpm
-            "blade_pitch": round(random.uniform(0, 90), 2),  # degrees
-            "nacelle_orientation": round(random.uniform(0, 360), 2),  # degrees
-            "vibration_level": round(random.uniform(0, 1), 3),  # normalized
-            "timestamp": time.time()
-        }
 
 
     def encrypt_turbine_data(self, message: dict):

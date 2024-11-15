@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wind Farm Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f5f5;
+        }
+
+        .dashboard-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .dashboard-title {
+            text-align: center;
+            color: #2c3e50;
+            padding: 10px 0;
+            font-size: calc(1.5rem + 0.5vw);
+        }
+
+        .kpi-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 100%;
+        }
+
+        .kpi-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 120px;
+        }
+
+        .kpi-value {
+            font-size: calc(1.2rem + 0.5vw);
+            font-weight: bold;
+            color: #2980b9;
+        }
+
+        .kpi-label {
+            color: #7f8c8d;
+            font-size: calc(0.8rem + 0.2vw);
+            margin-top: 5px;
+        }
+
+        .chart-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            flex-grow: 1;
+            min-height: 0;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+            min-height: 300px;
+            height: 100%;
+        }
+
+        @media (max-width: 1200px) {
+            .chart-container {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 10px;
+            }
+
+            .chart-container {
+                grid-template-columns: 1fr;
+            }
+
+            .kpi-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .kpi-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1 class="dashboard-title">Wind Farm Monitoring System</h1>
+
+        <div class="kpi-container">
+            <div class="kpi-card">
+                <div class="kpi-value" id="power-kpi">0 kW</div>
+                <div class="kpi-label">Power Output</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="wind-kpi">0 m/s</div>
+                <div class="kpi-label">Wind Speed</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="temp-kpi">0 °C</div>
+                <div class="kpi-label">Temperature</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="pressure-kpi">0 hPa</div>
+                <div class="kpi-label">Pressure</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-card">
+                <canvas id="powerChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <canvas id="windChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <canvas id="tempChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <canvas id="pressureChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function createChart(ctx, label, color) {
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: color,
+                        fill: false,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: label,
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'second' },
+                            title: { display: true, text: 'Time' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                maxTicksLimit: 6
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        const powerChart = createChart(
+            document.getElementById('powerChart').getContext('2d'),
+            'Power Output (kW)',
+            '#2980b9'
+        );
+
+        const windChart = createChart(
+            document.getElementById('windChart').getContext('2d'),
+            'Wind Speed (m/s)',
+            '#27ae60'
+        );
+
+        const tempChart = createChart(
+            document.getElementById('tempChart').getContext('2d'),
+            'Temperature (°C)',
+            '#e74c3c'
+        );
+
+        const pressureChart = createChart(
+            document.getElementById('pressureChart').getContext('2d'),
+            'Pressure (hPa)',
+            '#8e44ad'
+        );
+
+        function updateDashboard() {
+            fetch('/get_turbine_data')
+                .then(response => response.json())
+                .then(data => {
+                    const timestamp = new Date(data.timestamp * 1000);
+
+                    // Update KPIs
+                    document.getElementById('power-kpi').textContent = `${data.power_output} kW`;
+                    document.getElementById('wind-kpi').textContent = `${data.wind_speed} m/s`;
+                    document.getElementById('temp-kpi').textContent = `${data.temperature} °C`;
+                    document.getElementById('pressure-kpi').textContent = `${data.pressure} hPa`;
+
+                    // Update all charts
+                    const charts = [
+                        { chart: powerChart, value: data.power_output },
+                        { chart: windChart, value: data.wind_speed },
+                        { chart: tempChart, value: data.temperature },
+                        { chart: pressureChart, value: data.pressure }
+                    ];
+
+                    charts.forEach(({chart, value}) => {
+                        chart.data.labels.push(timestamp);
+                        chart.data.datasets[0].data.push(value);
+                        if (chart.data.labels.length > 50) {
+                            chart.data.labels.shift();
+                            chart.data.datasets[0].data.shift();
+                        }
+                        chart.update();
+                    });
+                });
+        }
+
+        // Update every second
+        setInterval(updateDashboard, 1000);
+        updateDashboard();
+    </script>
+</body>
+</html>
