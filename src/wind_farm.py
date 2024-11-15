@@ -7,7 +7,7 @@ import os
 import uuid
 
 from flask import Flask, request, jsonify
-from find_shortest_way import find_shortest_path
+from find_shortest_way import find_shortest_path, find_second_shortest_path
 import rsa
 import threading
 import update_satellite_positions
@@ -34,8 +34,9 @@ class WindTurbineNode:
         self.activate_device()
         self.public_key = self.load_key()
 
-        self.next_satellite, self.distance, self.shortest_path = self.load_nearest_satellite()
+        self.next_satellite, self.distance, self.shortest_path, self.second_next_satellite, self.second_distance, self.second_shortest_path = self.load_nearest_satellite()
         print(self.wf_host, self.shortest_path, self.next_satellite)
+        print(self.wf_host, self.second_shortest_path, self.second_next_satellite)
 
         self.app = Flask(self.name)
 
@@ -54,6 +55,11 @@ class WindTurbineNode:
             print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
         else:
             print("No satellites online yet.")
+
+        if self.second_next_satellite is not None:
+            print(f"Wind Turbine Node ready to send data to {self.second_next_satellite}")
+        else:
+            print("No second satellites online yet.")
 
 
     def get_weather_data(self):
@@ -197,28 +203,38 @@ class WindTurbineNode:
     def load_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
         shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
+        second_shortest_path, second_next_sat_distance = find_second_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
-            return None, None, None
+            return None, None, None, None, None, None
 
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        return next_sat_host, next_sat_distance, shortest_path
+        second_next_sat_name, second_next_sat_host = self.load_device_by_id(second_shortest_path[1])
+        return next_sat_host, next_sat_distance, shortest_path, second_next_sat_host, second_next_sat_distance, second_shortest_path
 
 
     def update_nearest_satellite(self):
         active_devices, broken_devices = self.get_active_devices()
         shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
+        second_shortest_path, second_next_sat_distance = find_second_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
 
         if shortest_path is None:
             self.next_satellite = None
             self.shortest_path = None
             self.distance = None
+            self.second_next_satellite = None
+            self.second_shortest_path = None
+            self.second_distance = None
             return
 
         next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
+        second_next_sat_name, second_next_sat_host = self.load_device_by_id(second_shortest_path[1])
         self.next_satellite = next_sat_host
         self.shortest_path = shortest_path
         self.distance = next_sat_distance
+        self.second_next_satellite = second_next_sat_host
+        self.second_shortest_path = second_shortest_path
+        self.second_distance = second_next_sat_distance
 
 
     def get_active_devices(self):
@@ -243,10 +259,10 @@ class WindTurbineNode:
         return encrypted_message
 
 
-    def simulate_leo_delay(self):
+    def simulate_leo_delay(self, distance):
         """Simulate LEO transmission delay with jitter"""
         C = 299_792_458 / 1000.0*1000.0  # kilometres per millisecond
-        base_delay = self.distance / C # milliseconds
+        base_delay = distance / C # milliseconds
         jitter = random.uniform(2, 8) # milliseconds
         leo_delay = (base_delay + jitter) / 1000 # seconds
         print(f"Adding {leo_delay:0.4f}s delay")
@@ -267,7 +283,7 @@ class WindTurbineNode:
             'X-Destination-ID': str(self.gs_id)
         }
 
-        time.sleep(self.simulate_leo_delay())
+        time.sleep(self.simulate_leo_delay(self.distance))
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
@@ -275,6 +291,21 @@ class WindTurbineNode:
             print(response.headers)
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
+        except Exception as e:
+            print(f"Error sending status update: {e}")
+
+        if self.second_next_satellite is None:
+            print("No second satellites online. No message sent...")
+            return
+
+        time.sleep(self.simulate_leo_delay(self.second_distance))
+        # Send HTTP POST request to the second next satellite
+        second_url = f"http://{self.second_next_satellite[0]}:{self.second_next_satellite[1]}/"
+        try:
+            second_response = requests.post(second_url, headers=headers, data=message_content, verify=False)
+            print(second_response.headers)
+            print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.second_next_satellite)
+            print("\033[91mResponse Received:\033[0m", second_response.status_code, second_response.text)
         except Exception as e:
             print(f"Error sending status update: {e}")
 
