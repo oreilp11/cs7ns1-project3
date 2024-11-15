@@ -143,9 +143,7 @@ class WindTurbineNode:
                 "pressure": round(pressure, 2),
                 "wind_speed": round(wind_speed, 2),
                 "power_output": round(power_output / 1000, 2),  # Convert to kW
-                "timestamp": time.time(),
-                "turbine_id": self.wf_id,
-                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
+                "timestamp": time.time()
             }
 
         except Exception as e:
@@ -156,9 +154,7 @@ class WindTurbineNode:
                 "pressure": round(random.uniform(900, 1100), 2),
                 "wind_speed": round(random.uniform(0, 25), 2),
                 "power_output": round(random.uniform(0, 5000), 2),
-                "timestamp": time.time(),
-                "turbine_id": self.wf_id,
-                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
+                "timestamp": time.time()
             }
 
 
@@ -309,11 +305,8 @@ class WindTurbineNode:
 
         message_content = self.encrypt_turbine_data(turbine_data)
 
-        headers = {
-            'X-Destination-ID': str(self.gs_id)
-        }
-
-        time.sleep(self.simulate_leo_delay(self.distance))
+        headers = {}
+        time.sleep(self.simulate_leo_delay())
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
