@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify
 import update_satellite_positions
-from find_shortest_way import find_shortest_path, find_second_shortest_path
+from find_shortest_way import find_shortest_path
 import csv
 import os
 from wind_farm import WindTurbineNode
@@ -36,23 +36,6 @@ def get_positions():
 def get_shortest_path():
     positions = update_satellite_positions.calculate_satellite_positions()
     path_nodes = find_shortest_path(positions, 0, -1)[0]
-    if not path_nodes:
-        return jsonify([])
-
-    path_coordinates = []
-    for node in path_nodes:
-        node_pos = next(pos for pos in positions if pos['id'] == node)
-        path_coordinates.append({
-            'lat': float(node_pos['lat']),
-            'long': float(node_pos['long'])
-        })
-
-    return jsonify(path_coordinates)
-
-@app.route('/get_second_shortest_path')
-def get_second_shortest_path():
-    positions = update_satellite_positions.calculate_satellite_positions()
-    path_nodes = find_second_shortest_path(positions, 0, -1)[0]
     if not path_nodes:
         return jsonify([])
 
