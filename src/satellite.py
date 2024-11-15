@@ -49,7 +49,6 @@ class Satellite:
 
             # Forward data to the next device
             threading.Thread(target=self.forward_data, args=(headers,data)).start()
-            threading.Thread(target=self.forward_data, args=(headers,data)).start()
             return jsonify({"message": f"Satellite {self.sat_id} received data"})
 
         print(f"{self.name} listening on {self.sat_host}")
@@ -195,6 +194,20 @@ class Satellite:
         except Exception as e:
             print(f"Error forwarding data: {e}")
 
+        # Simulate delay for secondary path
+        time.sleep(self.simulate_leo_delay(self.second_distance))
+
+        if not self.second_next_device:
+            print("No second next device to forward the message.")
+            return
+
+        try:
+            second_next_ip, second_next_port = self.second_next_device
+            # Forward the HTTP request to the second next device
+            response = requests.post(f"http://{second_next_ip}:{second_next_port}/", headers=headers, data=data, verify=False)
+            print(f"Forwarded data to {second_next_ip}:{second_next_port}, response: {response.status_code}")
+        except Exception as e:
+            print(f"Error forwarding data: {e}")
 
 
     def start_flask_app(self):
