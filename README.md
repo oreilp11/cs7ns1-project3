@@ -1,9 +1,7 @@
 # Codebase for CS7NS1 - Project 3
-
 Group Number: 8
 
-Group Members:
-
+__Group Members__
 - Paul O'Reilly \[ID - 24351186\]
 - Daya Lokesh Duddupudi \[ID - 24351819\]
 - Emile Delmas \[ID - 24332748\]
@@ -14,20 +12,16 @@ Group Members:
 This project simulates a network of wind turbines, ground stations, and satellites. The wind turbines send status updates to the nearest satellite, which then forwards the data to the ground station.
 
 ### Protocol Structure
-
 Uses HTTP 1.1 as a base, composed of two endpoints as follows:
 
 #### Endpoint 1: Check if Device is Online
-
-```http
+```
 GET / HTTP/1.1
 ```
-
 No headers necessary, optional/custom headers are permitted
 
 Returns the following JSON:
-
-```json
+```
 {
     "device-type": int,
     "device-id": int,
@@ -39,7 +33,6 @@ Returns the following JSON:
 ```
 
 The following is a breakdown of the three valid codes for `device-type`:
-
 - 0: Data Collection Node
 - 1: Satellite Node
 - 2: End Station Node
@@ -50,21 +43,18 @@ The following is a breakdown of the three valid codes for `device-type`:
 
 If not dynamically updating satellite position, set `latitude` & `longitude` to be a random real location reasonably close in proximity to your end station (ideally not too far from Ireland/UK but this will be usecase dependant). Set `altitude` to be somewhat realistic for the LEO context
 
-#### Endpoint 2: Forward Data Through the Network
 
-```http
+#### Endpoint 2: Forward Data Through the Network
+```
 POST / HTTP/1.1
 ```
-
-The `X-Destination-ID` header is to be included in every post request to enable relay routing. Optional/custom headers are permitted.
-
-The payload is to be sent in the body of this request.
+No headers necessary, optional/custom headers are permitted
+payload is sent in the body of this request
 
 Returns the following JSON:
-
 ```json
 {
-    "message": str
+    "message": str,
 }
 ```
 
@@ -81,16 +71,15 @@ optional fields are permitted
 
 #### Ground Station
 
- 1. __Run the ground station__:
 
+ 1. **Run the ground station**:
     ```sh
     python src/ground_station.py
     ```
 
 #### Satellite
 
-1. __Run a satellite__:
-
+1. **Run a satellite**:
     ```sh
     python src/satellite.py <Satellite ID>
     ```
@@ -99,8 +88,7 @@ optional fields are permitted
 
 #### Wind Farm
 
-1. __Run the wind farm__:
-
+1. **Run the wind farm**:
     ```sh
     python src/wind_farm.py
     ```
