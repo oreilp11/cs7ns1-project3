@@ -176,8 +176,8 @@ class Satellite:
 
 
     def forward_data(self, headers, data):
-        # Simulate delay
-        time.sleep(self.simulate_leo_delay())
+        # Simulate delay for primary path
+        time.sleep(self.simulate_leo_delay(self.distance))
 
         if 'X-Destination-ID' in headers:
             print(f"\n-----\nDestination ID: {headers['X-Destination-ID']}\n-----\n")
