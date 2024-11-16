@@ -27,8 +27,11 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
 
     print(f"Broken nodes: {broken_devices}")
 
-    # Convert positions list to dictionary
-    positions = {str(pos['id']): pos for pos in positions_list}
+    # Convert positions list to dictionary and ensure 'alt' is a float
+    positions = {}
+    for pos in positions_list:
+        pos['alt'] = float(pos.get('alt', 0))
+        positions[str(pos['id'])] = pos
 
     graph = {}
     # Build graph based on positions and rules

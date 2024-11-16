@@ -12,9 +12,7 @@ import rsa
 import threading
 import update_satellite_positions
 
-import pandas as pd
-from windpowerlib import ModelChain, WindTurbine
-import datetime
+from wind_turbine_calculator import WindTurbineCalculator
 
 class WindTurbineNode:
     def __init__(self, device_list_path, satellites_positions):
@@ -30,12 +28,8 @@ class WindTurbineNode:
             if satellite['id'] == self.wf_id:
                 self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
 
-        # Initialize Enercon E-126 wind turbine
-        self.turbine_data = {
-            'turbine_type': 'E-126/7500',  # Enercon E-126/7500 (7.5 MW)
-            'hub_height': 135  # hub height in m
-        }
-        self.wind_turbine = WindTurbine(**self.turbine_data)
+        # Initialize wind turbine calculator
+        self.turbine = WindTurbineCalculator()
 
         self.activate_device()
         self.public_key = self.load_key()
@@ -83,63 +77,39 @@ class WindTurbineNode:
             wind_speed = max(0, wind_speed)
             pressure = max(0, pressure)
 
-            columns = pd.MultiIndex.from_tuples([
-                ('wind_speed', 10),
-                ('temperature', 2),
-                ('pressure', 0),
-                ('roughness_length', 0)
-            ])
-
-            # Roughness length for open sea (m): https://en.wikipedia.org/wiki/Roughness_length
-            roughness = 0.0002
-
-            data = [[
-                wind_speed,
-                temperature + 273.15,  # Convert to Kelvin
-                pressure,
-                roughness
-            ]]
-
-            weather_df = pd.DataFrame(data, columns=columns)
-            weather_df.index = pd.DatetimeIndex([datetime.datetime.now()])
-
-            return weather_df
+            return {
+                'wind_speed': wind_speed,
+                'temperature': temperature,
+                'pressure': pressure
+            }
 
         except Exception as e:
             print(f"Weather API error: {e}")
             return None
 
     def generate_turbine_data(self):
-        """Simulate wind turbine sensor data using windpowerlib"""
+        """Generate wind turbine sensor data using simplified calculator"""
         try:
             # Get weather data
             weather_data = self.get_weather_data()
             if weather_data is None:
                 raise Exception("No weather data available")
 
-            print(weather_data)
-
-            # Initialize ModelChain
-            modelchain = ModelChain(self.wind_turbine)
-
-            # Run model with weather data
-            modelchain.run_model(weather_data)
-
-            power_output = float(modelchain.power_output.iloc[0])
-
-            # Properly extract scalar values from weather data and convert to float
-            wind_speed = float(weather_data[('wind_speed', 10)].iloc[0])
-            temperature = float(weather_data[('temperature', 2)].iloc[0])
-            pressure = float(weather_data[('pressure', 0)].iloc[0])
+            # Calculate power output
+            power_output = self.turbine.estimate_power_output(
+                wind_speed=weather_data['wind_speed'],
+                temperature_celsius=weather_data['temperature'],
+                pressure_pascal=weather_data['pressure']
+            )
 
             return {
-                "temperature": round(temperature-273.15, 2),
-                "pressure": round(pressure, 2),
-                "wind_speed": round(wind_speed, 2),
-                "power_output": round(power_output / 1000, 2),  # Convert to kW
+                "temperature": round(weather_data['temperature'], 2),
+                "pressure": round(weather_data['pressure'], 2),
+                "wind_speed": round(weather_data['wind_speed'], 2),
+                "power_output": round(power_output, 2),
                 "timestamp": time.time(),
                 "turbine_id": self.wf_id,
-                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
+                "uid": str(uuid.uuid4())
             }
 
         except Exception as e:
@@ -152,7 +122,7 @@ class WindTurbineNode:
                 "power_output": round(random.uniform(0, 5000), 2),
                 "timestamp": time.time(),
                 "turbine_id": self.wf_id,
-                "uid": str(uuid.uuid4())  # Add UID to the data dictionary
+                "uid": str(uuid.uuid4())
             }
 
 
