@@ -122,8 +122,7 @@ class WindTurbineNode:
                 "power_output": round(random.uniform(0, 5000), 2),
                 "timestamp": time.time(),
                 "turbine_id": self.wf_id,
-                "uid": str(uuid.uuid4()),
-                "turbine_id": self.wf_id
+                "uid": str(uuid.uuid4())
             }
 
 
