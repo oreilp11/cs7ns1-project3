@@ -10,7 +10,7 @@ from find_shortest_way import find_shortest_path
 import rsa
 import threading
 import update_satellite_positions
-
+import uuid
 from wind_turbine_calculator import WindTurbineCalculator
 
 class WindTurbineNode:
