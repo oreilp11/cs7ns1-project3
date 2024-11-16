@@ -1,14 +1,22 @@
 import math
 from datetime import datetime
 import numpy as np
-import pandas as pd
 import os
-
+import csv  # Added import for csv
 
 def read_static_positions():
     csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "device_positions.csv")
-    df = pd.read_csv(csv_path)
-    static_positions = df[df['id'].isin([-1, 0])].to_dict('records')
+
+    static_positions = []
+    with open(csv_path, mode='r', newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            row['id'] = int(row['id'])
+            row['lat'] = float(row['lat'])
+            row['long'] = float(row['long'])
+            row['alt'] = float(row.get('alt', 0))  # Ensure 'alt' is a float
+            static_positions.append(row)
+
     ground_station = next(pos for pos in static_positions if pos['id'] == -1)
     windfarm = next(pos for pos in static_positions if pos['id'] == 0)
     return ground_station, windfarm
