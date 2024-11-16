@@ -195,18 +195,6 @@ class Satellite:
         except Exception as e:
             print(f"Error forwarding data: {e}")
 
-        # Simulate delay
-        time.sleep(self.simulate_leo_delay())
-        if self.next_device:
-            try:
-                next_ip, next_port = self.next_device
-                # Forward the HTTP request to the next device
-                response = requests.post(f"http://{next_ip}:{next_port}/", headers=headers, data=data, verify=False)
-                print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
-            except Exception as e:
-                print(f"Error forwarding data: {e}")
-        else:
-            print("No next device to forward the message.")
 
 
     def start_flask_app(self):
