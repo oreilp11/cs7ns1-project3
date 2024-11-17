@@ -2,7 +2,6 @@ import time
 import json
 import random
 import requests
-import csv
 import os
 
 from flask import Flask, request, jsonify
@@ -11,38 +10,39 @@ import rsa
 import threading
 import update_satellite_positions
 from wind_turbine_calculator import WindTurbineCalculator
+import network_manager
 
 import datetime
 
 class WindTurbineNode:
-    def __init__(self, device_list_path, satellites_positions):
-        self.device_list_path = device_list_path
+    def __init__(self):
         self.name = "Offshore Windfarm"
-        self.wf_id, self.wf_host = self.load_device_by_name(self.name)
-        self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
+        self.wf_id = 0  # wind farm always has ID 0
+        self.wf_host = ('0.0.0.0', 33000)  # wind farm always uses port 33000
+        self.gs_id = -1  # ground station always has ID -1
 
-        # Get turbine position from satellites_positions
-        self.latitude, self.longitude, self.altitude = None, None, None
-        self.satellites_positions = satellites_positions
-        for satellite in satellites_positions:
-            if satellite['id'] == self.wf_id:
-                self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
-
+        # Initialize routing table
+        self.routing_table = network_manager.scan_network(device_id=self.wf_id, device_port=self.wf_host[1])
+        self.routing_table[self.wf_id] = self.wf_host
+        print(f"Routing table for {self.name}: {self.routing_table}")
 
         self.turbine = WindTurbineCalculator()
-        
-        self.activate_device()
         self.public_key = self.load_key()
 
-        self.turbine = WindTurbineCalculator()
-
-        self.next_satellite, self.distance, self.shortest_path = self.load_nearest_satellite()
-        print(self.wf_host, self.shortest_path, self.next_satellite)
+        positions = update_satellite_positions.read_static_positions()
+        self.latitude = positions[1]['lat']
+        self.longitude = positions[1]['long']
+        self.altitude = positions[1]['alt']
 
         self.app = Flask(self.name)
 
         @self.app.route('/', methods=['GET'])
         def get_device():
+            # Add device to routing table
+            device_id = int(request.args.get('device-id'))
+            device_port = request.args.get('device-port')
+            self.routing_table[device_id] = (request.remote_addr, int(device_port))
+            print(f"Added device {device_id} to routing table: {request.remote_addr}:{device_port}")
             return jsonify({
                 "device-type": 0,
                 "device-id": self.wf_id,
@@ -52,10 +52,17 @@ class WindTurbineNode:
                 "altitude": self.altitude
             })
 
-        if self.next_satellite is not None:
-            print(f"Wind Turbine Node ready to send data to {self.next_satellite}")
-        else:
-            print("No satellites online yet.")
+        @self.app.route('/down', methods=['GET'])
+        def remove_device():
+            # Remove device from routing table
+            device_id = int(request.args.get('device-id'))
+            if device_id in self.routing_table:
+                del self.routing_table[device_id]
+                print(f"Removed device {device_id} from routing table")
+            print(f"Routing table for {self.name}: {self.routing_table}")
+            return jsonify({
+                "message": f"Device {device_id} removed from routing table"
+            })
 
 
     def get_weather_data(self):
@@ -123,39 +130,6 @@ class WindTurbineNode:
             }
 
 
-
-    def activate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.wf_id:
-                device['status'] = 1
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
-    def deactivate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.wf_id:
-                device['status'] = 0
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
     def load_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
 
@@ -168,44 +142,9 @@ class WindTurbineNode:
         return key
 
 
-    def load_device_by_name(self, device_name):
-        device_host = ()
-        device_id = None
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if device['name'] == device_name:
-                    device_host = (device['ip'], int(device['port']))
-                    device_id = int(device["id"])
-        return device_id, device_host
-
-
-    def load_device_by_id(self, device_id):
-        device_host = ()
-        device_name = None
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if int(device['id'] )== device_id:
-                    device_host = (device['ip'], int(device['port']))
-                    device_name = device["name"]
-        return device_name, device_host
-
-
-    def load_nearest_satellite(self):
-        active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
-
-        if shortest_path is None:
-            return None, None, None
-
-        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        return next_sat_host, next_sat_distance, shortest_path
-
-
     def update_nearest_satellite(self):
-        active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.wf_id, self.gs_id, broken_devices)
+        self.satellites_positions = update_satellite_positions.calculate_satellite_positions(self.routing_table.keys())
+        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.wf_id, self.gs_id)
 
         if shortest_path is None:
             self.next_satellite = None
@@ -213,24 +152,15 @@ class WindTurbineNode:
             self.distance = None
             return
 
-        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        self.next_satellite = next_sat_host
-        self.shortest_path = shortest_path
-        self.distance = next_sat_distance
-
-
-    def get_active_devices(self):
-        active_devices = []
-        broken_devices = []
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if int(device['status']) == 1:
-                    active_devices.append(device['id'])
-                else:
-                    broken_devices.append(device['id'])
-
-        return active_devices, broken_devices
+        next_sat_id = shortest_path[1]
+        if next_sat_id in self.routing_table:
+            self.next_satellite = self.routing_table[next_sat_id]
+            self.shortest_path = shortest_path
+            self.distance = next_sat_distance
+        else:
+            self.next_satellite = None
+            self.shortest_path = None
+            self.distance = None
 
 
     def encrypt_turbine_data(self, message: dict):
@@ -269,7 +199,7 @@ class WindTurbineNode:
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
-            response = requests.post(url, headers=headers, data=message_content, verify=False)
+            response = requests.post(url, headers=headers, data=message_content, verify=False, proxies={"http": None, "https": None})
             print(response.headers)
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
@@ -284,25 +214,18 @@ class WindTurbineNode:
             "debug": False
         }, daemon=True).start()
 
-
 if __name__ == "__main__":
     try:
-        base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-        devices = os.path.join(base_path, "devices_ip.csv")
-        satellites_positions = update_satellite_positions.calculate_satellite_positions()
-
-        turbine = WindTurbineNode(devices, satellites_positions)
+        turbine = WindTurbineNode()
         turbine.start_flask_app()
 
         input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")
 
-        # Simulation loop
         while True:
-            # Send regular status update
             message = turbine.send_status_update()
             time.sleep(5)
 
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
-        turbine.deactivate_device()
+        network_manager.send_down_device(turbine.routing_table, turbine.wf_id)

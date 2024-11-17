@@ -34,8 +34,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return R * c
 
-def calculate_satellite_positions():
-    n_satellites = 10
+def calculate_satellite_positions(device_ids):
     ground_station, windfarm = read_static_positions()
 
     # Calculate middle point
@@ -50,8 +49,11 @@ def calculate_satellite_positions():
     altitude = 500  # km
     satellites = []
 
-    for i in range(n_satellites):
-        satellite_id = i + 1
+    # remove 0 and -1 from device_ids
+    device_ids = [i for i in device_ids if i not in [0, -1]]
+
+    for i in device_ids:
+        satellite_id = i
         np.random.seed(satellite_id)
         start_radius = 750 / 111  # Start from ~750 km from the center
 

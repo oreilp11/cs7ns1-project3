@@ -9,36 +9,49 @@ import sys
 from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
 import update_satellite_positions
-
+import network_manager
 
 class Satellite:
-    def __init__(self, sat_id, device_list_path, satellites_positions):
-        self.device_list_path = device_list_path
-        self.wf_id, self.wf_host = self.load_device_by_name("Offshore Windfarm")
-        self.gs_id, self.gs_host = self.load_device_by_name("Ground Station")
-        self.sat_id = int(sat_id)  # Ensure sat_id is an integer
-        self.name, self.sat_host = self.load_device_by_id(self.sat_id)
+    def __init__(self, sat_id):
+        self.sat_id = int(sat_id)
+        self.name = f"Satellite {self.sat_id}"
+        self.sat_host = ('0.0.0.0', 33000 + self.sat_id)
 
-        self.latitude, self.longitude, self.altitude = None, None, None
-        self.satellites_positions = satellites_positions
-        for satellite in satellites_positions:
-            if satellite['id'] == self.sat_id:
-                self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
+        self.gs_id = -1
+        self.wf_id = 0
 
-        self.activate_device()
-        self.next_device, self.distance, self.shortest_path = self.load_nearest_satellite()
-
+        # Initialize Flask app
         self.app = Flask(self.name)
 
+        # routing_table is dictionary of device_id to (host, port) tuple
+        self.routing_table = network_manager.scan_network(device_id=self.sat_id,device_port=self.sat_host[1])
+        self.routing_table[self.sat_id] = self.sat_host
+
+        print(f"Routing table for {self.name}: {self.routing_table}")
+        # Setup routes
         @self.app.route('/', methods=['GET'])
         def get_device():
+            # Add device to routing table
+            device_id = int(request.args.get('device-id'))
+            device_port = request.args.get('device-port')
+            self.routing_table[device_id] = (request.remote_addr, device_port)
+            print(f"Added device {device_id} to routing table: {request.remote_addr}:{device_port}")
             return jsonify({
                 "device-type": 1,
-                "device-id": self.wf_id,
+                "device-id": self.sat_id,
                 "group-id": 8,
-                "latitude": self.latitude,
-                "longitude": self.longitude,
-                "altitude": self.altitude
+            })
+
+        @self.app.route('/down', methods=['GET'])
+        def remove_device():
+            # Remove device from routing table
+            device_id = int(request.args.get('device-id'))
+            if device_id in self.routing_table:
+                del self.routing_table[device_id]
+                print(f"Removed device {device_id} from routing table")
+            print(f"Routing table for {self.name}: {self.routing_table}")
+            return jsonify({
+                "message": f"Device {device_id} removed from routing table"
             })
 
         @self.app.route('/', methods=['POST'])
@@ -52,80 +65,10 @@ class Satellite:
             return jsonify({"message": f"Satellite {self.sat_id} received data"})
 
         print(f"{self.name} listening on {self.sat_host}")
-        print(f"Shortest path to Ground Station: {self.shortest_path}")
-        print(f"Next device: {self.next_device}")
-
-
-    def activate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.sat_id:
-                device['status'] = 1
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
-    def deactivate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.sat_id:
-                device['status'] = 0
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
-    def load_device_by_name(self, device_name):
-        device_host = ()
-        device_id = None
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if device['name'] == device_name:
-                    device_host = (device['ip'], int(device['port']))
-                    device_id = int(device["id"])
-        return device_id, device_host
-
-
-    def load_device_by_id(self, device_id):
-        device_host = ()
-        device_name = None
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if int(device['id'] )== device_id:
-                    device_host = (device['ip'], int(device['port']))
-                    device_name = device["name"]
-        return device_name, device_host
-
-
-    def load_nearest_satellite(self):
-        active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.sat_id, self.gs_id, broken_devices)
-
-        if shortest_path is None:
-            return None, None, None
-
-        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
-        return next_sat_host, next_sat_distance, shortest_path
-
 
     def update_nearest_satellite(self):
-        active_devices, broken_devices = self.get_active_devices()
-        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.sat_id, self.gs_id, broken_devices)
+        self.satellites_positions = update_satellite_positions.calculate_satellite_positions(self.routing_table.keys())
+        shortest_path, next_sat_distance = find_shortest_path(self.satellites_positions, self.sat_id, self.gs_id)
 
         if shortest_path is None:
             self.next_device = None
@@ -133,24 +76,10 @@ class Satellite:
             self.distance = None
             return
 
-        next_sat_name, next_sat_host = self.load_device_by_id(shortest_path[1])
+        next_sat_host = self.routing_table[shortest_path[1]]
         self.next_device = next_sat_host
         self.shortest_path = shortest_path
         self.distance = next_sat_distance
-
-
-    def get_active_devices(self):
-        active_devices = []
-        broken_devices = []
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if int(device['status']) == 1:
-                    active_devices.append(device['id'])
-                else:
-                    broken_devices.append(device['id'])
-
-        return active_devices, broken_devices
 
 
     def simulate_leo_delay(self):
@@ -165,6 +94,7 @@ class Satellite:
 
     def forward_data(self, headers, data):
         # Simulate delay
+        self.update_nearest_satellite()
         time.sleep(self.simulate_leo_delay())
 
         if 'X-Destination-ID' in headers:
@@ -173,15 +103,15 @@ class Satellite:
         if not self.next_device:
             print("No next device to forward the message.")
             return
-        
+
         try:
             next_ip, next_port = self.next_device
             # Forward the HTTP request to the next device
-            response = requests.post(f"http://{next_ip}:{next_port}/", headers=headers, data=data, verify=False)
+            response = requests.post(f"http://{next_ip}:{next_port}/", headers=headers, data=data, verify=False,proxies={"http": None, "https": None})
             print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
         except Exception as e:
             print(f"Error forwarding data: {e}")
-        
+
 
 
     def start_flask_app(self):
@@ -202,18 +132,14 @@ if __name__ == "__main__":
 
         sat_id = sys.argv[1]
 
-        base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-        devices = os.path.join(base_path, "devices_ip.csv")
-        satellites_positions = update_satellite_positions.calculate_satellite_positions()
-
-        satellite = Satellite(sat_id, devices, satellites_positions)
+        satellite = Satellite(sat_id)
         satellite.start_flask_app()
         print(f"Satellite {sat_id} Online.")
         while True:
-            satellite.update_nearest_satellite()
+            # satellite.update_nearest_satellite()
             time.sleep(5)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
-        satellite.deactivate_device()
+        network_manager.send_down_device(satellite.routing_table, satellite.sat_id)
 

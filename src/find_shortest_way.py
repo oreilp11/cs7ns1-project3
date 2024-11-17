@@ -25,8 +25,6 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
         print("Error: Start or end node is in broken devices list")
         return
 
-    print(f"Broken nodes: {broken_devices}")
-
     # Convert positions list to dictionary
     positions = {str(pos['id']): pos for pos in positions_list}
 
@@ -45,7 +43,7 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
                 if (dev1 in ['-1', '0'] and dev2 in ['-1', '0']):
                     can_connect = False
                 # Rule 2: 0 & -1 can only connect to satellites within 300km
-                elif (dev1 in ['-1', '0'] and distance > 600) or (dev2 in ['-1', '0'] and distance > 600):
+                elif (dev1 in ['-1', '0'] and distance > 700) or (dev2 in ['-1', '0'] and distance > 700):
                     can_connect = False
                 # Rule 3: Satellites can connect to each other without distance limits
                 elif pos1['alt'] > 0 and pos2['alt'] > 0:

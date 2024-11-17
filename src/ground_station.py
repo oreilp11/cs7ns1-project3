@@ -1,28 +1,29 @@
-import csv
-import os
 import time
 import json
 import rsa
 import threading
+import os
 
 from flask import Flask, request, jsonify
 import update_satellite_positions
-
+import network_manager
 
 class GroundStationNode:
-    def __init__(self, device_list_path, satellites_positions):
-        self.device_list_path = device_list_path
+    def __init__(self):
         self.name = "Ground Station"
-        self.gs_id, self.gs_host = self.load_device_by_name(self.name)
+        self.gs_id = -1  # ground station always has ID -1
+        self.gs_host = ('0.0.0.0', 33999)  # ground station always uses port 32999
 
-        self.latitude, self.longitude, self.altitude = None, None, None
-        self.satellites_positions = satellites_positions
-        for satellite in satellites_positions:
-            if satellite['id'] == self.gs_id:
-                self.latitude, self.longitude, self.altitude = satellite['lat'], satellite['long'], satellite['alt']
+        # Get position from static positions
+        positions = update_satellite_positions.read_static_positions()
+        self.latitude = positions[0]['lat']
+        self.longitude = positions[0]['long']
+        self.altitude = positions[0]['alt']
 
-        self.activate_device()
         self.private_key = self.load_key(private=True)
+
+        # Announce presence to network
+        network_manager.scan_network(device_id=self.gs_id, device_port=self.gs_host[1])
 
         self.app = Flask(self.name)
 
@@ -69,46 +70,12 @@ class GroundStationNode:
                 print(f'"message": "Alert - Parameters exceeded thresholds", "alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
-
-    def activate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.gs_id:
-                device['status'] = 1
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
-    def deactivate_device(self):
-        with open(self.device_list_path, 'r', newline='') as device_file:
-            device_dict = csv.DictReader(device_file)
-            devices = list(device_dict)
-            fields = device_dict.fieldnames
-
-        for device in devices:
-            if int(device["id"]) == self.gs_id:
-                device['status'] = 0
-
-        with open(self.device_list_path, 'w', newline='') as device_file:
-            device_writer = csv.DictWriter(device_file, fields)
-            device_writer.writeheader()
-            device_writer.writerows(devices)
-
-
     def decrypt_turbine_data(self, encrypted_message):
         ### need to start splitting the message up into chunks if message size > 245 bytes
         encrypted_message = rsa.decrypt(encrypted_message, self.private_key)
         text = encrypted_message.decode("utf-8")
         message = json.loads(text)
         return message
-
 
     def load_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
@@ -121,19 +88,6 @@ class GroundStationNode:
                 key = rsa.PublicKey.load_pkcs1(keyfile.read())
         return key
 
-
-    def load_device_by_name(self, device_name):
-        device_host = ()
-        device_id = None
-        with open(self.device_list_path, 'r') as device_file:
-            device_dict = csv.DictReader(device_file)
-            for device in device_dict:
-                if device['name'] == device_name:
-                    device_host = (device['ip'], int(device['port']))
-                    device_id = int(device["id"])
-        return device_id, device_host
-
-
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
             "host": self.gs_host[0],
@@ -144,18 +98,15 @@ class GroundStationNode:
 
 
 if __name__ == "__main__":
-    base_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),"assets")
-    devices = os.path.join(base_path, "devices_ip.csv")
-    satellites_positions = update_satellite_positions.calculate_satellite_positions()
-
-    ground_station = GroundStationNode(devices, satellites_positions)
-    ground_station.start_flask_app()
-    print("Ground Station Online.")
-
     try:
+        ground_station = GroundStationNode()
+        ground_station.start_flask_app()
+        print("Ground Station Online.")
+
         while True:
-            pass
+            time.sleep(5)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
     finally:
-        ground_station.deactivate_device()
+        # Notify network that ground station is going offline
+        network_manager.send_down_device({-1: ground_station.gs_host}, ground_station.gs_id)
