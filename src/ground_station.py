@@ -107,6 +107,3 @@ if __name__ == "__main__":
             time.sleep(5)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
-    finally:
-        # Notify network that ground station is going offline
-        network_manager.send_down_device({-1: ground_station.gs_host}, ground_station.gs_id)

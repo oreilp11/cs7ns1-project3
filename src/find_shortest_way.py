@@ -1,6 +1,32 @@
 import csv
 import heapq
-from math import radians, cos, sin, asin, sqrt
+import math
+from math import radians, cos, sin, asin, sqrt, pi, erfc
+
+def calculate_link_quality(distance):
+    # Constants (using reasonable approximations)
+    f = 2.4e9  # frequency (2.4 GHz)
+    c = 3e8    # speed of light
+    Pt = 0.1   # transmit power (100mW)
+    T = 290    # temperature (K)
+    k = 1.38e-23  # Boltzmann constant
+    B = 20e6   # bandwidth (20 MHz)
+
+    # Path loss calculation (in dB)
+    L = 20 * math.log10((4 * pi * distance * 1000 * f) / c)  # distance converted to meters
+
+    # Received power
+    Pr = Pt * (10 ** (-L/10))
+
+    # SNR calculation
+    SNR = Pr / (T * k * B)
+
+    # Approximate BER (using simplified calculation as erfc might be computationally expensive)
+    # We'll use log(1 + SNR) as a quality metric instead of actual BER
+    # Higher value means better quality
+    quality = math.log(1 + SNR)
+
+    return quality
 
 def haversine(lon1, lat1, lon2, lat2):
     # Convert coordinates to radians
@@ -42,16 +68,19 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
                 # Rule 1: 0 & -1 can't connect directly
                 if (dev1 in ['-1', '0'] and dev2 in ['-1', '0']):
                     can_connect = False
-                # Rule 2: 0 & -1 can only connect to satellites within 300km
-                elif (dev1 in ['-1', '0'] and distance > 700) or (dev2 in ['-1', '0'] and distance > 700):
-                    can_connect = False
-                # Rule 3: Satellites can connect to each other without distance limits
-                elif pos1['alt'] > 0 and pos2['alt'] > 0:
-                    can_connect = True
+
 
                 if can_connect:
-                    graph.setdefault(dev1, []).append((dev2, distance))
-                    graph.setdefault(dev2, []).append((dev1, distance))
+                    # Calculate link quality and use it to modify the weight
+                    link_quality = calculate_link_quality(distance)
+                    # Weight is now a combination of distance and signal quality
+                    # We use distance/link_quality so that:
+                    # - Higher distances increase the weight
+                    # - Better signal quality decreases the weight
+                    weight = distance / link_quality
+
+                    graph.setdefault(dev1, []).append((dev2, weight))
+                    graph.setdefault(dev2, []).append((dev1, weight))
 
     # Rest of the pathfinding algorithm remains the same
     queue = [(0, str(start_node), [])]

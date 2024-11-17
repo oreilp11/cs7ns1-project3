@@ -2,6 +2,7 @@ import requests
 from typing import Dict, Tuple, List
 import time
 import os
+import threading
 
 def read_ips() -> List[str]:
     """Read IPs from file"""
@@ -39,14 +40,24 @@ def scan_network(device_id, device_port, start_port: int = 33001, end_port: int 
   return active_devices
 
 
-def send_down_device(routing_table, device_id):
+def send_down_device(routing_table, device_id, source_id):
   """
   Send to everyone except the device_id, that the device is down
   """
-  for next_device_id, (next_ip, next_port) in routing_table.items():
-    if next_device_id == device_id:
-      continue
+  def notify_device(next_device_id, next_ip, next_port):
     try:
-      response = requests.get(f"http://{next_ip}:{next_port}/down", params={'device-id': device_id}, timeout=1,proxies={"http": None, "https": None})
+      requests.get(f"http://{next_ip}:{next_port}/down", params={'device-id': device_id}, timeout=1, proxies={"http": None, "https": None})
     except requests.exceptions.RequestException:
       print(f"Error sending down message to device {next_device_id}")
+
+  threads = []
+  # exclude the device down and source
+  for next_device_id, (next_ip, next_port) in routing_table.items():
+    if next_device_id == device_id or next_device_id == source_id:
+      continue
+    thread = threading.Thread(target=notify_device, args=(next_device_id, next_ip, next_port))
+    threads.append(thread)
+    thread.start()
+
+  for thread in threads:
+    thread.join()

@@ -111,8 +111,11 @@ class Satellite:
             print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
         except Exception as e:
             print(f"Error forwarding data: {e}")
-
-
+            network_manager.send_down_device(self.routing_table, self.shortest_path[1],self.sat_id)
+            if self.shortest_path[1] in self.routing_table:
+                del self.routing_table[int(self.shortest_path[1])]
+                print(f"Removed satellite {self.shortest_path[1]} from routing table")
+            self.forward_data(headers, data)
 
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
@@ -140,6 +143,4 @@ if __name__ == "__main__":
             time.sleep(5)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
-    finally:
-        network_manager.send_down_device(satellite.routing_table, satellite.sat_id)
 
