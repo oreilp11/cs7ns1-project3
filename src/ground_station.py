@@ -40,7 +40,14 @@ class GroundStationNode:
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
-            data = self.decrypt_turbine_data(request.data)
+            data = request.data
+            data = self.hamming_decode_message(data)
+            if data is None:
+                print("Too many Errors, could not decode")
+                print(f"Message: {request.data}")
+                return jsonify({"message":"Too many Errors, could not decode"})
+            
+            data = self.decrypt_turbine_data(data)
 
             end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
@@ -70,12 +77,54 @@ class GroundStationNode:
                 print(f'"message": "Alert - Parameters exceeded thresholds", "alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
+
     def decrypt_turbine_data(self, encrypted_message):
         ### need to start splitting the message up into chunks if message size > 245 bytes
         encrypted_message = rsa.decrypt(encrypted_message, self.private_key)
         text = encrypted_message.decode("utf-8")
         message = json.loads(text)
         return message
+    
+
+    def hamming_decode_message(self, encoded_data: bytes) -> bytes:
+        decoded_nibbles = []
+
+        # Convert bytes into bit strings
+        bit_string = ''.join(f"{byte:08b}" for byte in encoded_data)
+
+        # Process each 7-bit block
+        for i in range(0, len(bit_string), 7):
+            block = bit_string[i:i+7].ljust(7, '0')  # Ensure block is 7 bits
+            decoded_nibble = self.hamming_decode(block)
+            decoded_nibbles.append(decoded_nibble)
+
+        # Combine decoded nibbles into bytes
+        decoded_message = []
+        for i in range(0, len(decoded_nibbles), 2):
+            if i + 1 < len(decoded_nibbles):
+                high_nibble = int(decoded_nibbles[i], 2) << 4
+                low_nibble = int(decoded_nibbles[i + 1], 2)
+                decoded_message.append(high_nibble | low_nibble)
+
+        return bytes(decoded_message)
+    
+    def hamming_decode(str, encoded: str) -> str:
+        """Decodes a byte message using Hamming (7,4) code and corrects errors where possible"""
+        p1, p2, d1, p3, d2, d3, d4 = map(int, encoded)
+        c1 = p1 ^ d1 ^ d2 ^ d4  # Syndrome bit 1
+        c2 = p2 ^ d1 ^ d3 ^ d4  # Syndrome bit 2
+        c3 = p3 ^ d2 ^ d3 ^ d4  # Syndrome bit 3
+        error_position = c1 * 1 + c2 * 2 + c3 * 4
+
+        corrected = list(encoded)
+        if error_position != 0:  # If there is an error
+            error_index = error_position - 1
+            corrected[error_index] = '1' if corrected[error_index] == '0' else '0'
+
+        # Extract original data bits
+        d1, d2, d3, d4 = corrected[2], corrected[4], corrected[5], corrected[6]
+        return f"{d1}{d2}{d3}{d4}"
+
 
     def load_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
@@ -87,6 +136,7 @@ class GroundStationNode:
             with open(os.path.join(keypath,'public.pem'), 'r') as keyfile:
                 key = rsa.PublicKey.load_pkcs1(keyfile.read())
         return key
+        
 
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
