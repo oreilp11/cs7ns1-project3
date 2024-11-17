@@ -13,7 +13,7 @@ devices_path = os.path.join(base_path, 'assets', 'devices_ip.csv')
 app = Flask(__name__, template_folder=template_path, static_folder=static_path)
 
 # Initialize WindTurbineNode to access generate_turbine_data
-turbine_node = WindTurbineNode(devices_path, update_satellite_positions.calculate_satellite_positions())
+turbine_node = WindTurbineNode()
 
 @app.route('/')
 def index():
@@ -21,7 +21,7 @@ def index():
 
 @app.route('/get_positions')
 def get_positions():
-    positions = update_satellite_positions.calculate_satellite_positions()
+    positions = update_satellite_positions.calculate_satellite_positions(range(1,11))
     with open(devices_path, mode='r') as file:
         # add name for each position
         reader = csv.DictReader(file)
@@ -34,7 +34,7 @@ def get_positions():
 
 @app.route('/get_shortest_path')
 def get_shortest_path():
-    positions = update_satellite_positions.calculate_satellite_positions()
+    positions = update_satellite_positions.calculate_satellite_positions(range(1,11))
     path_nodes = find_shortest_path(positions, 0, -1)[0]
     if not path_nodes:
         return jsonify([])
