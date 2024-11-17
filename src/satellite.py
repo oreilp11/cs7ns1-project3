@@ -112,7 +112,9 @@ class Satellite:
         except Exception as e:
             print(f"Error forwarding data: {e}")
             network_manager.send_down_device(self.routing_table, self.shortest_path[1],self.sat_id)
-            print(f"Removed satellite {self.shortest_path[1]} from routing table")
+            if self.shortest_path[1] in self.routing_table:
+                del self.routing_table[int(self.shortest_path[1])]
+                print(f"Removed satellite {self.shortest_path[1]} from routing table")
             self.forward_data(headers, data)
 
     def start_flask_app(self):

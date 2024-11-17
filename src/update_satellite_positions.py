@@ -43,7 +43,7 @@ def calculate_satellite_positions(device_ids):
 
     # Get current time
     now = datetime.now()
-    time_factor = (now.minute % 3) * 60 + now.second
+    time_factor = (now.minute % 6) * 60 + now.second
 
     # Parameters for satellite positioning
     altitude = 500  # km
@@ -57,16 +57,17 @@ def calculate_satellite_positions(device_ids):
         np.random.seed(satellite_id)
         start_radius = 750 / 111  # Start from ~750 km from the center
 
-        # Find two random points on the circle
-        angle1 = np.random.uniform(0, 2 * math.pi)
-        angle2 = np.random.uniform(0, 2 * math.pi)
+        # Find two random points on the circle ensuring the distance between them is at least the radius
+        angle1 = np.random.uniform(-math.pi/4, 3*math.pi/4)
+        angle2 = (angle1 + math.pi) % (2 * math.pi)  # Ensure angle2 is at least 180 degrees apart from angle1
+
         point1_lat = mid_lat + start_radius * math.sin(angle1)
         point1_long = mid_long + (start_radius / math.cos(math.radians(mid_lat))) * math.cos(angle1)
         point2_lat = mid_lat + start_radius * math.sin(angle2)
         point2_long = mid_long + (start_radius / math.cos(math.radians(mid_lat))) * math.cos(angle2)
 
         # Calculate position on the line between the two points
-        t = (time_factor + i*15) % 180 / 180
+        t = (time_factor + i*30) % 360 / 360
         new_lat = point1_lat + t * (point2_lat - point1_lat)
         new_long = point1_long + t * (point2_long - point1_long)
 
