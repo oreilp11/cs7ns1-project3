@@ -17,12 +17,26 @@ def read_ips() -> List[str]:
         print(f"Warning: {filename} not found. Using localhost.")
         return ['0.0.0.0']
 
+def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
+  """Read other network satellites from file"""
+  try:
+    # filename is in assets, other_network_satellites.txt
+    filename = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "other_satellites.txt")
+    with open(filename, 'r') as f:
+      lines = f.readlines()
+      if not lines:
+        return {}
+      return {int(line.split()[0]): (line.split()[1], int(line.split()[2])) for line in lines}
+  except FileNotFoundError:
+    print(f"Warning: {filename} not found. Using empty dictionary.")
+    return {}
+
 def scan_network(device_id, device_port, start_port: int = 33001, end_port: int = 33010) -> Dict[int, Tuple[str, int]]:
   """
   Scan network for active devices on all IPs from ip.txt
   Returns a dictionary mapping device IDs to their (host, port) tuples
   """
-  active_devices = {}
+  active_devices = read_other_network_satellites()
   ips = read_ips()
   print(f"Scanning network for devices on ports {start_port}-{end_port} and port 33999 on IPs: {ips}")
 

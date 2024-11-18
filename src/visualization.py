@@ -56,6 +56,8 @@ def dashboard():
 @app.route('/get_turbine_data')
 def get_turbine_data():
     data = turbine_node.generate_turbine_data()
+    first_turbine_key = next(iter(data['turbines']))
+    data['turbines'] = {first_turbine_key: data['turbines'][first_turbine_key]}
     return jsonify(data)
 
 if __name__ == '__main__':

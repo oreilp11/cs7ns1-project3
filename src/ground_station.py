@@ -46,8 +46,12 @@ class GroundStationNode:
                 print("Too many Errors, could not decode")
                 print(f"Message: {request.data}")
                 return jsonify({"message":"Too many Errors, could not decode"})
-            
+
             data = self.decrypt_turbine_data(data)
+
+            if data is None:
+                print("Decryption failed or message is corrupted")
+                return jsonify({"message":"Decryption failed or message is corrupted"})
 
             end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
@@ -80,14 +84,17 @@ class GroundStationNode:
 
 
     def decrypt_turbine_data(self, encrypted_message):
-        decrypted_message = []
-        for i in range(0, len(encrypted_message), 256):
-            decrypted_message.append(rsa.decrypt(encrypted_message[i:i+256], self.private_key))
-        decrypted_message = bytes(b''.join(decrypted_message))
-        text = decrypted_message.decode("utf-8")
-        message = json.loads(text)
-        return message
-    
+        try:
+            decrypted_message = []
+            for i in range(0, len(encrypted_message), 256):
+                decrypted_message.append(rsa.decrypt(encrypted_message[i:i+256], self.private_key))
+            decrypted_message = bytes(b''.join(decrypted_message))
+            text = decrypted_message.decode("utf-8")
+            message = json.loads(text)
+            return message
+        except (rsa.pkcs1.DecryptionError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
 
     def hamming_decode_message(self, encoded_data: bytes) -> bytes:
         decoded_nibbles = []
@@ -110,7 +117,7 @@ class GroundStationNode:
                 decoded_message.append(high_nibble | low_nibble)
 
         return bytes(decoded_message)
-    
+
     def hamming_decode(str, encoded: str) -> str:
         """Decodes a byte message using Hamming (7,4) code and corrects errors where possible"""
         p1, p2, d1, p3, d2, d3, d4 = map(int, encoded)
@@ -139,7 +146,7 @@ class GroundStationNode:
             with open(os.path.join(keypath,'public.pem'), 'r') as keyfile:
                 key = rsa.PublicKey.load_pkcs1(keyfile.read())
         return key
-        
+
 
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
