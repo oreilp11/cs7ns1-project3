@@ -5,33 +5,36 @@ from math import radians, cos, sin, asin, sqrt, pi, erfc
 
 def calculate_link_quality(distance):
     # Constants (using reasonable approximations)
-    f = 2.4e9  # frequency (2.4 GHz)
+    f = 30e9  # frequency (30 GHz) [Ka band used by Starlink]
     c = 3e8    # speed of light
-    Pt = 0.1   # transmit power (100mW)
-    T = 290    # temperature (K)
+    Pt = 50   # transmit power (50W) [50W used by Starlink to overcome high attenuation wrt distance]
+    T = 290    # temperature (K) [Average temperature in thermosphere (85km - 690km) at LEO orbit (approx 550km) is roughly 290K]
     k = 1.38e-23  # Boltzmann constant
-    B = 20e6   # bandwidth (20 MHz)
+    B = 10e6   # bandwidth (10 MHz) [large bandwith used by Starlink for high speed internet]
 
     # Path loss calculation (in dB)
     L = 20 * math.log10((4 * pi * distance * 1000 * f) / c)  # distance converted to meters
-
+    Pt = 10 * math.log10(Pt) + 30 # converting to dBm
     # Received power
-    Pr = Pt * (10 ** (-L/10))
+    Pr = Pt * (10 ** (-L/10)) 
+    Pr = 10 * math.log10(Pr) + 30 # converting to dBm
+    N = 10 * math.log10(T * k * B) + 30 # converting to dBm
 
     # SNR calculation
-    SNR = Pr / (T * k * B)
+    SNR = Pr / N
 
-    # Approximate BER (using simplified calculation as erfc might be computationally expensive)
-    # We'll use log(1 + SNR) as a quality metric instead of actual BER
+    # Approximate BER (using second order taylor series expansion around x=1 as erfc might be computationally expensive)
     # Higher value means better quality
-    quality = math.log(1 + SNR)
+    q0 = 0.1587 # 1/2 erfc(1/sqrt(2))
+    qc = 4.1327 # sqrt(2*e*pi)
+    quality = 1 / (q0 - (SNR-1)/qc + (SNR-1)**2/(2*qc)) # take inverse of approximated BER => higher quality = lower BER
 
     return quality
 
-def haversine(lon1, lat1, lon2, lat2):
+def haversine_alt_dist(pos1, pos2):
     # Convert coordinates to radians
-    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-
+    lon1, lat1, lon2, lat2 = map(radians, [pos1['long'], pos1['lat'], pos2['long'], pos2['lat']])
+    alt1, alt2 = map(float, [pos1['alt'], pos2['alt']])
     # Haversine formula
     dlon = lon2 - lon1
     dlat = lat2 - lat1
@@ -39,7 +42,10 @@ def haversine(lon1, lat1, lon2, lat2):
     c = 2 * asin(sqrt(a))
     # Radius of earth in kilometers
     r = 6371
-    return c * r
+    haversine_dist = c * r
+    true_dist = math.sqrt(haversine_dist**2 + (alt1-alt2)**2)
+    return true_dist
+
 
 def find_shortest_path(positions_list, start_node, end_node, broken_devices=None):
     if broken_devices is None:
@@ -61,7 +67,7 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
             if dev1 != dev2 and dev1 not in broken_devices and dev2 not in broken_devices:
                 pos1 = positions[dev1]
                 pos2 = positions[dev2]
-                distance = haversine(pos1['long'], pos1['lat'], pos2['long'], pos2['lat'])
+                distance = haversine_alt_dist(pos1, pos2)
 
                 # Apply connection rules
                 can_connect = True
@@ -93,7 +99,8 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
         if node == str(end_node):
             print(f"Shortest distance: {cost:0.3f} km")
             print("Path:", " -> ".join(path))
-            return [int(node) for node in path], cost
+            dist = haversine_alt_dist(positions[path[0]], positions[path[1]])
+            return [int(node) for node in path], dist
         visited.add(node)
         for neighbor, weight in graph.get(node, []):
             if neighbor not in visited:

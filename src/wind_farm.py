@@ -215,23 +215,25 @@ class WindTurbineNode:
 
     def simulate_noise(self, data: bytes) -> bytes:
         """Simulate LEO transmission delay with jitter"""
-        f = 30*10e9 # GHz
-        C = 299_792_458 # m/s^2
+        f = 30e9 # GHz
+        C = 3e8 # m/s^2
         Pt = 50 # Watts
         Pt = 10*math.log10(Pt) + 30
-        L = 20*math.log10(self.distance) + 20*math.log10(f*4*math.pi/C)
+        L = 20*math.log10(self.distance*1000*f*4*math.pi/C)
         Pr = 10**(-L/10)*Pt
         Pr = 10*math.log10(Pr) + 30
         print(f"Attenuation {L:0.2f}dB")
         print(f"Transmitting power {Pt:0.2f}dBm, Received power {Pr:0.2f}dBm")
-        T = 300 # Kelvin
-        k = 1.380_649e-23 # Boltzmann constant
-        B = 1*10**9 # GHz
+        T = 290 # Kelvin
+        k = 1.38e-23 # Boltzmann constant
+        B = 10e6 # 10MHz
         N = 10*math.log10(T*k*B) + 30
-        print(f"Noise due to temperature: {N}")
-        SNR = Pr/N
+        print(f"Noise due to temperature: {N:0.4f}dBm")
+        SNR = Pr / N
         print(f"SNR: {SNR:0.4f}")
-        BER = 0.5*math.erfc(math.sqrt(SNR))/100
+        q0 = 0.1587 # 1/2 erfc(1/sqrt(2))
+        qc = 4.1327 # sqrt(2*e*pi)
+        BER = (q0 - (SNR-1)/qc + (SNR-1)**2/(2*qc)) / 100
         print(f"BER: {BER:0.4f}")
 
         bits = "".join([f"{byte:08b}" for byte in data])
@@ -267,13 +269,14 @@ class WindTurbineNode:
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
 
-            response = requests.post(url, headers=headers, data=message_content, verify=False,timeout=1, proxies={"http": None, "https": None})
+            response = requests.post(url, headers=headers, data=noisy_data, verify=False, timeout=1, proxies={"http": None, "https": None})
             
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
 
             time.sleep(self.simulate_leo_delay())
             print(response.headers)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
+
         except Exception as e:
             print(f"Error sending status update: {e}")
             # remove satellite from routing table, it's down
