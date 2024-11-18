@@ -17,6 +17,20 @@ def read_ips() -> List[str]:
         print(f"Warning: {filename} not found. Using localhost.")
         return ['0.0.0.0']
 
+def read_wf_and_gs() ->  Dict[int, Tuple[str, int]]:
+    """Read windfarm and ground station from file"""
+    try:
+        # filename is in assets, wf_gs.txt
+        filename = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "wf_gs.txt")
+        with open(filename, 'r') as f:
+            lines = f.readlines()
+            if not lines:
+                return {}
+            return {int(line.split()[0]): (line.split()[1], int(line.split()[2])) for line in lines}
+    except FileNotFoundError:
+        print(f"Warning: {filename} not found. Using empty dictionary.")
+        return {}
+
 def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
   """Read other network satellites from file"""
   try:
@@ -24,9 +38,9 @@ def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
     filename = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "other_satellites.txt")
     with open(filename, 'r') as f:
       lines = f.readlines()
-      if not lines:
+      if not lines or all(not line.strip() for line in lines):
         return {}
-      return {int(line.split()[0]): (line.split()[1], int(line.split()[2])) for line in lines}
+      return {int(line.split()[0]): (line.split()[1], int(line.split()[2])) for line in lines if line.strip()}
   except FileNotFoundError:
     print(f"Warning: {filename} not found. Using empty dictionary.")
     return {}
@@ -36,14 +50,17 @@ def scan_network(device_id, device_port, start_port: int = 33001, end_port: int 
   Scan network for active devices on all IPs from ip.txt
   Returns a dictionary mapping device IDs to their (host, port) tuples
   """
-  active_devices = read_other_network_satellites()
+  active_devices = {}
+  active_devices.update(read_wf_and_gs())
+  active_devices.update(read_other_network_satellites())
   ips = read_ips()
-  print(f"Scanning network for devices on ports {start_port}-{end_port} and port 33999 on IPs: {ips}")
+
+  print(f"Scanning network for devices on ports {start_port}-{end_port}: {ips}")
 
   device_positions = update_satellite_positions.calculate_satellite_positions(range(1, 11))
   # add yourself to the routing table
   for ip in ips:
-    for port in list(range(start_port, end_port + 1)) + [33999]:
+    for port in list(range(start_port, end_port + 1)):
       try:
         next_id = start_port - 33000
         delay = simulate_leo_delay(device_positions,device_id,next_id)
@@ -79,7 +96,7 @@ def send_down_device(routing_table, device_id, source_id):
   def notify_device(next_device_id, next_ip, next_port):
     try:
       next_id = next_port - 33000
-      delay = simulate_leo_delay(device_positions,device_id,next_id)
+      delay = simulate_leo_delay(device_positions,next_device_id,source_id)
       time.sleep(delay)
       requests.get(f"http://{next_ip}:{next_port}/down", params={'device-id': device_id}, timeout=1, proxies={"http": None, "https": None})
       time.sleep(delay)

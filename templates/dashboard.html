@@ -114,7 +114,7 @@
 </head>
 <body>
     <div class="dashboard-container">
-        <h1 class="dashboard-title">Wind Farm Monitoring System</h1>
+        <h1 class="dashboard-title">Wind Farm Monitoring System : Turbine {{ turbine_id }}</h1>
 
         <div class="kpi-container">
             <div class="kpi-card">
@@ -219,7 +219,7 @@
         );
 
         function updateDashboard() {
-            fetch('/get_turbine_data')
+            fetch('/get_turbine_data/{{ turbine_id }}')
                 .then(response => response.json())
                 .then(data => {
                     const timestamp = new Date(data.timestamp * 1000);

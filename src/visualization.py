@@ -22,13 +22,8 @@ def index():
 @app.route('/get_positions')
 def get_positions():
     positions = update_satellite_positions.calculate_satellite_positions(range(1,11))
-    with open(devices_path, mode='r') as file:
-        # add name for each position
-        reader = csv.DictReader(file)
-        for row in reader:
-            for pos in positions:
-                if pos['id'] == int(row['id']):
-                    pos['name'] = row['name']
+    for pos in positions:
+        pos['name'] = f"Satellite {pos['id']}"
 
     return jsonify(positions)
 
@@ -49,16 +44,20 @@ def get_shortest_path():
 
     return jsonify(path_coordinates)
 
-@app.route('/dashboard')
-def dashboard():
-    return render_template('dashboard.html')
+@app.route('/dashboard/<int:turbine_id>')
+def dashboard(turbine_id):
+    return render_template('dashboard.html', turbine_id=turbine_id)
 
-@app.route('/get_turbine_data')
-def get_turbine_data():
+@app.route('/get_turbine_data/<int:turbine_id>')
+def get_turbine_data(turbine_id):
     data = turbine_node.generate_turbine_data()
-    first_turbine_key = next(iter(data['turbines']))
-    data['turbines'] = {first_turbine_key: data['turbines'][first_turbine_key]}
-    return jsonify(data)
+    turbine_key = f'turbine {turbine_id}'
+    if turbine_key in data['turbines']:
+        single_turbine_data = data['turbines'][turbine_key]
+        single_turbine_data['timestamp'] = data['timestamp']
+        return jsonify(single_turbine_data)
+    else:
+        return jsonify({'error': 'Turbine ID not found'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
