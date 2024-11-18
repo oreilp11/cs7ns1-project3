@@ -3,6 +3,7 @@ import json
 import rsa
 import threading
 import os
+import csv
 
 from flask import Flask, request, jsonify
 import update_satellite_positions
@@ -22,10 +23,25 @@ class GroundStationNode:
 
         self.private_key = self.load_key(private=True)
 
-        # Announce presence to network
+        # # Announce presence to network
         network_manager.scan_network(device_id=self.gs_id, device_port=self.gs_host[1])
 
         self.app = Flask(self.name)
+
+        # Initialize CSV file (erase if exists)
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+        self.csv_file_path = os.path.join(data_dir, 'turbine_data.csv')
+        if os.path.exists(self.csv_file_path):
+            os.remove(self.csv_file_path)
+            print(f"Erased existing CSV file at {self.csv_file_path}")
+        # Create the CSV file with headers
+        with open(self.csv_file_path, mode='w', newline='') as csvfile:
+            fieldnames = ['timestamp', 'turbine_id', 'turbine', 'temperature', 'pressure', 'wind_speed', 'power_output']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            print(f"Created new CSV file at {self.csv_file_path}")
 
         @self.app.route('/', methods=['GET'])
         def get_device():
@@ -53,6 +69,9 @@ class GroundStationNode:
                 print("Decryption failed or message is corrupted")
                 return jsonify({"message":"Decryption failed or message is corrupted"})
 
+            # Write data to CSV file
+            self.store_data_to_csv(data)
+
             end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
             print(f"Data received at Ground Station")
@@ -62,7 +81,7 @@ class GroundStationNode:
             thresholds = {
                 "power_output": (5000.0, 6000.0)
             }
-            
+
             # Check if any parameter exceeds the threshold
             alerts = {}
             for turbine, vars in data['turbines'].items():
@@ -77,6 +96,22 @@ class GroundStationNode:
                 print(f'"message": "Alert - Parameters exceeded thresholds"')#, "alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
+    def store_data_to_csv(self, data):
+        """Store received data in a CSV file."""
+        with open(self.csv_file_path, mode='a', newline='') as csvfile:
+            fieldnames = ['timestamp', 'turbine_id', 'turbine', 'temperature', 'pressure', 'wind_speed', 'power_output']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            for turbine_name, turbine_data in data['turbines'].items():
+                row = {
+                    'timestamp': data['timestamp'],
+                    'turbine_id': data['turbine_id'],
+                    'turbine': turbine_name,
+                    'temperature': turbine_data['temperature'],
+                    'pressure': turbine_data['pressure'],
+                    'wind_speed': turbine_data['wind_speed'],
+                    'power_output': turbine_data['power_output']
+                }
+                writer.writerow(row)
 
     def decrypt_turbine_data(self, encrypted_message):
         try:

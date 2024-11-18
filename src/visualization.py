@@ -12,8 +12,8 @@ devices_path = os.path.join(base_path, 'assets', 'devices_ip.csv')
 
 app = Flask(__name__, template_folder=template_path, static_folder=static_path)
 
-# Initialize WindTurbineNode to access generate_turbine_data
-turbine_node = WindTurbineNode()
+# Remove initialization of WindTurbineNode
+# turbine_node = WindTurbineNode()
 
 @app.route('/')
 def index():
@@ -23,7 +23,12 @@ def index():
 def get_positions():
     positions = update_satellite_positions.calculate_satellite_positions(range(1,11))
     for pos in positions:
-        pos['name'] = f"Satellite {pos['id']}"
+        if pos['id'] == 0:
+            pos['name'] = "Windfarm"
+        elif pos['id'] == -1:
+            pos['name'] = "Ground Station"
+        else:
+            pos['name'] = f"Satellite {pos['id']}"
 
     return jsonify(positions)
 
@@ -50,12 +55,26 @@ def dashboard(turbine_id):
 
 @app.route('/get_turbine_data/<int:turbine_id>')
 def get_turbine_data(turbine_id):
-    data = turbine_node.generate_turbine_data()
-    turbine_key = f'turbine {turbine_id}'
-    if turbine_key in data['turbines']:
-        single_turbine_data = data['turbines'][turbine_key]
-        single_turbine_data['timestamp'] = data['timestamp']
-        return jsonify(single_turbine_data)
+    csv_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'turbine_data.csv')
+    if not os.path.exists(csv_file_path):
+        return jsonify({'error': 'No data available'}), 404
+
+    # Read the latest data for the specified turbine
+    latest_data = None
+    with open(csv_file_path, mode='r') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if int(row['turbine'].split(' ')[1]) == turbine_id:
+                latest_data = row
+
+    if latest_data:
+        return jsonify({
+            'timestamp': float(latest_data['timestamp']),
+            'temperature': float(latest_data['temperature']),
+            'pressure': float(latest_data['pressure']),
+            'wind_speed': float(latest_data['wind_speed']),
+            'power_output': float(latest_data['power_output'])
+        })
     else:
         return jsonify({'error': 'Turbine ID not found'}), 404
 

@@ -45,13 +45,12 @@ def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
     print(f"Warning: {filename} not found. Using empty dictionary.")
     return {}
 
-def scan_network(device_id, device_port, start_port: int = 33001, end_port: int = 33010) -> Dict[int, Tuple[str, int]]:
+def scan_network(device_id, device_port, start_port: int = 33000, end_port: int = 33010) -> Dict[int, Tuple[str, int]]:
   """
   Scan network for active devices on all IPs from ip.txt
   Returns a dictionary mapping device IDs to their (host, port) tuples
   """
   active_devices = {}
-  active_devices.update(read_wf_and_gs())
   active_devices.update(read_other_network_satellites())
   ips = read_ips()
 
@@ -60,7 +59,7 @@ def scan_network(device_id, device_port, start_port: int = 33001, end_port: int 
   device_positions = update_satellite_positions.calculate_satellite_positions(range(1, 11))
   # add yourself to the routing table
   for ip in ips:
-    for port in list(range(start_port, end_port + 1)):
+    for port in list(range(start_port, end_port + 1)) + [33999]:
       try:
         next_id = start_port - 33000
         delay = simulate_leo_delay(device_positions,device_id,next_id)
@@ -95,7 +94,6 @@ def send_down_device(routing_table, device_id, source_id):
   device_positions = update_satellite_positions.calculate_satellite_positions(range(1, 11))
   def notify_device(next_device_id, next_ip, next_port):
     try:
-      next_id = next_port - 33000
       delay = simulate_leo_delay(device_positions,next_device_id,source_id)
       time.sleep(delay)
       requests.get(f"http://{next_ip}:{next_port}/down", params={'device-id': device_id}, timeout=1, proxies={"http": None, "https": None})
