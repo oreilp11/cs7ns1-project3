@@ -80,3 +80,4 @@ def calculate_satellite_positions(device_ids):
 
     # Return all positions including ground station and windfarm
     return [ground_station, windfarm] + satellites
+

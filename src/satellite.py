@@ -33,7 +33,6 @@ class Satellite:
         @self.app.route('/', methods=['GET'])
         def get_device():
             # Add device to routing table
-            #time.sleep(self.simulate_leo_delay())
             device_id = int(request.args.get('device-id'))
             device_port = request.args.get('device-port')
             self.routing_table[device_id] = (request.remote_addr, device_port)
@@ -47,7 +46,6 @@ class Satellite:
         @self.app.route('/down', methods=['GET'])
         def remove_device():
             # Remove device from routing table
-            #time.sleep(self.simulate_leo_delay())
             device_id = int(request.args.get('device-id'))
             if device_id in self.routing_table:
                 del self.routing_table[device_id]
@@ -59,7 +57,6 @@ class Satellite:
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
-            #time.sleep(self.simulate_leo_delay())
             headers = request.headers
             data = request.data
             print(f"Data received at Satellite {self.sat_id} : {data}")
@@ -95,7 +92,7 @@ class Satellite:
         leo_delay = (base_delay + jitter) / 1000 # seconds
         print(f"Adding {leo_delay:0.4f}s delay")
         return leo_delay
-    
+
 
     def simulate_noise(self, data):
         f = 30*10e9 # GHz
@@ -123,20 +120,22 @@ class Satellite:
             if random.random() < BER:
                 bit = '1' if bit == '0' else '0'
             flipped_bits.append(bit)
-        
+
         flipped_data = bytes(int("".join(flipped_bits[i:i+8]), base=2) for i in range(len(flipped_bits), 8) if len("".join(flipped_bits[i:i+8]))>0)
 
         return flipped_data
 
 
     def forward_data(self, headers, data):
-        # Simulate delay
-        self.update_nearest_satellite()
-
         #data = self.simulate_noise(data)
 
         if 'X-Destination-ID' in headers:
             print(f"\n-----\nDestination ID: {headers['X-Destination-ID']}\n-----\n")
+
+        if headers['X-Group-ID'] == '8':
+            self.update_nearest_satellite()
+        else:
+            self.next_device = headers['X-Destination-IP'], headers['X-Destination-Port']
 
         if not self.next_device:
             print("No next device to forward the message.")
@@ -145,6 +144,8 @@ class Satellite:
         try:
             next_ip, next_port = self.next_device
             # Forward the HTTP request to the next device
+            print(f"Forwarding data to {next_ip}:{next_port}")
+            time.sleep(self.simulate_leo_delay())
             response = requests.post(f"http://{next_ip}:{next_port}/", headers=headers, data=data, verify=False,proxies={"http": None, "https": None})
             time.sleep(self.simulate_leo_delay())
             print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
@@ -156,7 +157,7 @@ class Satellite:
                 print(f"Removed satellite {self.shortest_path[1]} from routing table")
             self.forward_data(headers, data)
 
-            
+
     def start_flask_app(self):
         threading.Thread(target=self.app.run, kwargs={
             "host": self.sat_host[0],

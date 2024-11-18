@@ -40,7 +40,6 @@ class WindTurbineNode:
         @self.app.route('/', methods=['GET'])
         def get_device():
             # Add device to routing table
-            time.sleep(self.simulate_leo_delay())
             device_id = int(request.args.get('device-id'))
             device_port = request.args.get('device-port')
             self.routing_table[device_id] = (request.remote_addr, int(device_port))
@@ -57,7 +56,6 @@ class WindTurbineNode:
         @self.app.route('/down', methods=['GET'])
         def remove_device():
             # Remove device from routing table
-            time.sleep(self.simulate_leo_delay())
             device_id = int(request.args.get('device-id'))
             if device_id in self.routing_table:
                 del self.routing_table[device_id]
@@ -261,17 +259,21 @@ class WindTurbineNode:
         error_correct_data = self.hamming_encode_message(encrypted_data)
         noisy_data = self.simulate_noise(error_correct_data)
 
+        dest_ip = self.routing_table[self.gs_id][0]
+        dest_port = str(self.routing_table[self.gs_id][1])
         headers = {
-            'X-Destination-ID': str(self.gs_id)
+            'X-Destination-ID': str(self.gs_id),
+            'X-Destination-IP': dest_ip,
+            'X-Destination-Port': dest_port,
+            'X-Group-ID': '8'
         }
 
-        time.sleep(self.simulate_leo_delay())
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
-
+            time.sleep(self.simulate_leo_delay())
             response = requests.post(url, headers=headers, data=noisy_data, verify=False, timeout=1, proxies={"http": None, "https": None})
-            
+
             print("\033[92mStatus Update Sent:\033[0m", turbine_data.keys(), "to", self.next_satellite)
 
             time.sleep(self.simulate_leo_delay())
