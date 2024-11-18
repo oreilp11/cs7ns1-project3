@@ -12,19 +12,19 @@ def calculate_link_quality(distance):
     k = 1.38e-23  # Boltzmann constant
     B = 10e6   # bandwidth (10 MHz) [large bandwith used by Starlink for high speed internet]
 
+    # Path loss calculation (in dB)
+    L = 20 * math.log10((4 * pi * distance * 1000 * f) / c)  # distance converted to meters
+
     # Received power
-    Pr = Pt * (c/(4 * pi * distance * 1000 * f))*2
-    Pr = 10 * math.log10(Pr) + 30 # converting to dBm
-    Nt = 10 * math.log10(T * k * B) + 30 # converting to dBm
-    sigma = 1e-8 # Average conditions
-    Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
+    Pr = Pt * (10 ** (-L/10))
 
     # SNR calculation
-    SNR = Pr - Nt - Nphi
+    SNR = Pr / (T * k * B)
 
-    # Approximate inverse BER (use quality metric as erfc might be computationally expensive)
+    # Approximate BER (using simplified calculation as erfc might be computationally expensive)
+    # We'll use log(1 + SNR) as a quality metric instead of actual BER
     # Higher value means better quality
-    quality = math.log(1+SNR)
+    quality = math.log(1 + SNR)
 
     return quality
 
