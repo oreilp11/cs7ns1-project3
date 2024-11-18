@@ -60,19 +60,14 @@ class GroundStationNode:
 
             # Define threshold values
             thresholds = {
-                "wind_speed": 5.0,       # Example threshold for wind speed in m/s
-                "power_output": 1200.0,   # Example threshold for power output in kW
-                "rotor_speed": 10.0,      # Example threshold for rotor speed in rpm
-                "blade_pitch": 75.0,      # Example threshold for blade pitch in degrees
-                "nacelle_orientation": 300.0,  # Example threshold for nacelle orientation in degrees
-                "vibration_level": 0.8    # Example threshold for vibration level (normalized)
+                "power_output": (5000.0, 6000.0)
             }
-
+            
             # Check if any parameter exceeds the threshold
             alerts = {}
             for turbine, vars in data['turbines'].items():
                 for param, threshold in thresholds.items():
-                    if param in vars and vars[param] > threshold:
+                    if param in vars and (vars[param] < threshold[0] or vars[param] > threshold[1]):
                         alerts[turbine] = f"[{param}] {vars[param]} exceeds threshold {threshold}"
 
             # Return the appropriate response based on checks

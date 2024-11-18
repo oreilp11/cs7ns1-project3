@@ -102,7 +102,10 @@ class WindTurbineNode:
                         "wind_speed": round(max(0, weather_data['wind_speed'] + random.uniform(-0.3, 0.3)), 2),
                         "pressure": round(max(0, weather_data['pressure'] + random.uniform(-50, 50)), 2),
                         "power_output": round(self.turbine.estimate_power_output(
-                            weather_data['wind_speed'],weather_data['temperature'],weather_data['pressure']), 2)
+                            round(weather_data['temperature'] + random.uniform(-0.5, 0.5), 2),
+                            round(max(0, weather_data['wind_speed'] + random.uniform(-0.3, 0.3)), 2),
+                            round(max(0, weather_data['pressure'] + random.uniform(-50, 50)), 2)
+                            ), 2)
                     } for i in range(self.num_turbines)
                 }
             }
@@ -121,7 +124,7 @@ class WindTurbineNode:
                         "temperature": round(random.uniform(-10, 40), 2),
                         "pressure": round(random.uniform(900, 1100), 2),
                         "wind_speed": round(random.uniform(0, 25), 2),
-                        "power_output": round(random.uniform(0, 5000), 2),
+                        "power_output": round(random.uniform(4000, 7000), 2),
                     } for i in range(self.num_turbines)
                 }
             }
@@ -213,22 +216,33 @@ class WindTurbineNode:
 
     def simulate_noise(self, data: bytes) -> bytes:
         """Simulate LEO transmission delay with jitter"""
-        f = 30e9 # GHz
+        """Simulate LEO transmission delay with jitter"""
+        C = 299_792_458 / 1000.0*1000.0  # kilometres per millisecond
+        base_delay = self.distance / C # milliseconds
+        jitter = random.uniform(2, 8) # milliseconds
+        leo_delay = (base_delay + jitter) / 1000 # seconds
+        print(f"Adding {leo_delay:0.4f}s delay")
+        return leo_delay
+
+
+    def simulate_noise(self, data: bytes) -> bytes:
+        """Simulate LEO transmission delay with jitter"""
+        f = 2.4e8 # 2.4GHz
         C = 3e8 # m/s^2
-        Pt = 50 # Watts
-        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))*2
+        Pt = 75 # Watts
+        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))**2
         Pt = 10*math.log10(Pt) + 30
         Pr = 10*math.log10(Pr) + 30
         print(f"Transmitting power {Pt:0.2f}dBm, Received power {Pr:0.2f}dBm")
         T = 290 # Kelvin
         k = 1.38e-23 # Boltzmann constant
-        B = 2e9 # 2000MHz (Starlink)
+        B = 10e6 # 10MHz
         Nt = 10*math.log10(T*k*B) + 30
         print(f"Noise due to temperature: {Nt:0.2f}dBm")
-        sigma = random.uniform(1e-8, 5e-8) # Average atmospheric conditions
+        sigma = random.uniform(1e-9, 2e-8) # Average atmospheric conditions
         Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
         print(f"Noise due to transit time: {Nphi:0.2f}dBm")
-        SNR = Pr - Nt - Nphi
+        SNR = Pr - (Nt + Nphi)
         print(f"SNR: {SNR:0.2f}")
         BER = 0.5*math.erfc(SNR/math.sqrt(2))
         print(f"BER: {BER:0.2e}")

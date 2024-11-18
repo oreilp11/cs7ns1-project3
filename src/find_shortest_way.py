@@ -3,7 +3,7 @@ import heapq
 import math
 from math import radians, cos, sin, asin, sqrt, pi, erfc
 
-def calculate_link_quality(distance):
+def calculate_link_quality(distance, is_ground_transmission=False):
     # Constants (using reasonable approximations)
     f = 30e9  # frequency (30 GHz) [Ka band used by Starlink]
     c = 3e8    # speed of light
@@ -12,21 +12,23 @@ def calculate_link_quality(distance):
     k = 1.38e-23  # Boltzmann constant
     B = 10e6   # bandwidth (10 MHz) [large bandwith used by Starlink for high speed internet]
 
-    # Path loss calculation (in dB)
-    L = 20 * math.log10((4 * pi * distance * 1000 * f) / c)  # distance converted to meters
-
-    # Received power
-    Pr = Pt * (10 ** (-L/10))
-
-    # SNR calculation
-    SNR = Pr / (T * k * B)
-
-    # Approximate BER (using simplified calculation as erfc might be computationally expensive)
-    # We'll use log(1 + SNR) as a quality metric instead of actual BER
-    # Higher value means better quality
-    quality = math.log(1 + SNR)
+    f = 2.4e8 # 2.4GHz
+    C = 3e8 # m/s^2
+    Pt = 75 # Watts
+    Pr = Pt * (C/(4 * math.pi * distance * 1000 * f))**2
+    Pt = 10*math.log10(Pt) + 30
+    Pr = 10*math.log10(Pr) + 30
+    T = 290 # Kelvin
+    k = 1.38e-23 # Boltzmann constant
+    B = 10e6 # 10MHz
+    Nt = 10*math.log10(T*k*B) + 30
+    sigma = 1e-8 if is_ground_transmission else 1e-9
+    Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
+    SNR = Pr - (Nt + Nphi)
+    quality = 2 / max(math.erfc(SNR/math.sqrt(2)), 1e-100)
 
     return quality
+
 
 def haversine_alt_dist(pos1, pos2):
     # Convert coordinates to radians
