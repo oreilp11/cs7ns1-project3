@@ -66,22 +66,25 @@ class GroundStationNode:
 
             # Check if any parameter exceeds the threshold
             alerts = {}
-            for param, threshold in thresholds.items():
-                if param in data and data[param] > threshold:
-                    alerts[param] = f"{data[param]} exceeds threshold {threshold}"
+            for turbine, vars in data['turbines'].items():
+                for param, threshold in thresholds.items():
+                    if param in vars and vars[param] > threshold:
+                        alerts[turbine] = f"[{param}] {vars[param]} exceeds threshold {threshold}"
 
             # Return the appropriate response based on checks
             if not alerts:
                 print(f'"message": "OK - All parameters within safe thresholds"')
             else:
-                print(f'"message": "Alert - Parameters exceeded thresholds", "alerts": {alerts}')
+                print(f'"message": "Alert - Parameters exceeded thresholds"')#, "alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
 
     def decrypt_turbine_data(self, encrypted_message):
-        ### need to start splitting the message up into chunks if message size > 245 bytes
-        encrypted_message = rsa.decrypt(encrypted_message, self.private_key)
-        text = encrypted_message.decode("utf-8")
+        decrypted_message = []
+        for i in range(0, len(encrypted_message), 256):
+            decrypted_message.append(rsa.decrypt(encrypted_message[i:i+256], self.private_key))
+        decrypted_message = bytes(b''.join(decrypted_message))
+        text = decrypted_message.decode("utf-8")
         message = json.loads(text)
         return message
     

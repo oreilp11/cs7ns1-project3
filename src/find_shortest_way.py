@@ -12,22 +12,19 @@ def calculate_link_quality(distance):
     k = 1.38e-23  # Boltzmann constant
     B = 10e6   # bandwidth (10 MHz) [large bandwith used by Starlink for high speed internet]
 
-    # Path loss calculation (in dB)
-    L = 20 * math.log10((4 * pi * distance * 1000 * f) / c)  # distance converted to meters
-    Pt = 10 * math.log10(Pt) + 30 # converting to dBm
     # Received power
-    Pr = Pt * (10 ** (-L/10)) 
+    Pr = Pt * (c/(4 * pi * distance * 1000 * f))*2
     Pr = 10 * math.log10(Pr) + 30 # converting to dBm
-    N = 10 * math.log10(T * k * B) + 30 # converting to dBm
+    Nt = 10 * math.log10(T * k * B) + 30 # converting to dBm
+    sigma = 1e-8 # Average conditions
+    Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
 
     # SNR calculation
-    SNR = Pr / N
+    SNR = Pr - Nt - Nphi
 
-    # Approximate BER (using second order taylor series expansion around x=1 as erfc might be computationally expensive)
+    # Approximate inverse BER (use quality metric as erfc might be computationally expensive)
     # Higher value means better quality
-    q0 = 0.1587 # 1/2 erfc(1/sqrt(2))
-    qc = 4.1327 # sqrt(2*e*pi)
-    quality = 1 / (q0 - (SNR-1)/qc + (SNR-1)**2/(2*qc)) # take inverse of approximated BER => higher quality = lower BER
+    quality = math.log(1+SNR)
 
     return quality
 
@@ -97,7 +94,7 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
             continue
         path = path + [node]
         if node == str(end_node):
-            print(f"Shortest distance: {cost:0.3f} km")
+            print(f"Minimum weight: {cost:0.3f} km / quality")
             print("Path:", " -> ".join(path))
             dist = haversine_alt_dist(positions[path[0]], positions[path[1]])
             return [int(node) for node in path], dist

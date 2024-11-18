@@ -20,6 +20,7 @@ class WindTurbineNode:
         self.wf_id = 0  # wind farm always has ID 0
         self.wf_host = ('0.0.0.0', 33000)  # wind farm always uses port 33000
         self.gs_id = -1  # ground station always has ID -1
+        self.num_turbines = 30
 
         # Initialize routing table
         self.routing_table = network_manager.scan_network(device_id=self.wf_id, device_port=self.wf_host[1])
@@ -76,19 +77,10 @@ class WindTurbineNode:
             data = response.json()
             current = data['current']
 
-            # Get current weather data with small random variations
-            temperature = current['temperature_2m'] + random.uniform(-0.5, 0.5)  # ±0.5°C jitter
-            wind_speed = (current['wind_speed_10m'] / 3.6) + random.uniform(-0.3, 0.3)  # ±0.3 m/s jitter
-            pressure = (current['surface_pressure'] * 100) + random.uniform(-50, 50)  # ±50 Pa jitter
-
-            # Ensure non-zero physical variables don't go below 0
-            wind_speed = max(0, wind_speed)
-            pressure = max(0, pressure)
-
             return {
-                'wind_speed': wind_speed,
-                'temperature': temperature,
-                'pressure': pressure
+                'wind_speed': current['wind_speed_10m'] / 3.6,
+                'temperature': current['temperature_2m'],
+                'pressure': current['surface_pressure'] * 100
             }
 
         except Exception as e:
@@ -103,33 +95,39 @@ class WindTurbineNode:
             if weather_data is None:
                 raise Exception("No weather data available")
 
-            # Calculate power output
-            power_output = self.turbine.estimate_power_output(
-                wind_speed=weather_data['wind_speed'],
-                temperature_celsius=weather_data['temperature'],
-                pressure_pascal=weather_data['pressure']
-            )
-
-            return {
-                "temperature": round(weather_data['temperature'], 2),
-                "pressure": round(weather_data['pressure'], 2),
-                "wind_speed": round(weather_data['wind_speed'], 2),
-                "power_output": round(power_output, 2),
+            data = {
                 "timestamp": time.time(),
-                "turbine_id": self.wf_id
+                "turbine_id": self.wf_id,
+                "turbines": {
+                    f"turbine {i+1}": {
+                        "temperature": round(weather_data['temperature'] + random.uniform(-0.5, 0.5), 2),
+                        "wind_speed": round(max(0, weather_data['wind_speed'] + random.uniform(-0.3, 0.3)), 2),
+                        "pressure": round(max(0, weather_data['pressure'] + random.uniform(-50, 50)), 2),
+                        "power_output": round(self.turbine.estimate_power_output(
+                            weather_data['wind_speed'],weather_data['temperature'],weather_data['pressure']), 2)
+                    } for i in range(self.num_turbines)
+                }
             }
+
+            return data
 
         except Exception as e:
             print(f"Error generating turbine data: {e}")
             # Fallback to random data if simulation fails
-            return {
-                "temperature": round(random.uniform(-10, 40), 2),
-                "pressure": round(random.uniform(900, 1100), 2),
-                "wind_speed": round(random.uniform(0, 25), 2),
-                "power_output": round(random.uniform(0, 5000), 2),
+
+            data = {
                 "timestamp": time.time(),
-                "turbine_id": self.wf_id
+                "turbine_id": self.wf_id,
+                "turbines": {
+                    f"turbine {i+1}": {
+                        "temperature": round(random.uniform(-10, 40), 2),
+                        "pressure": round(random.uniform(900, 1100), 2),
+                        "wind_speed": round(random.uniform(0, 25), 2),
+                        "power_output": round(random.uniform(0, 5000), 2),
+                    } for i in range(self.num_turbines)
+                }
             }
+            return data
 
 
     def load_key(self, private=False):
@@ -165,12 +163,14 @@ class WindTurbineNode:
             self.distance = None
 
 
-    def encrypt_turbine_data(self, message: dict):
+    def encrypt_turbine_data(self, message: dict) -> bytes:
         ### need to start splitting the message up into chunks if message size > 245 bytes
         text = json.dumps(message)
         utf8_text = text.encode("utf-8")
-        encrypted_message = rsa.encrypt(utf8_text, self.public_key)
-        return encrypted_message
+        encrypted_message = []
+        for i in range(0, len(utf8_text), 245):
+            encrypted_message.append(rsa.encrypt(utf8_text[i:i+245], self.public_key))
+        return bytes(b''.join(encrypted_message))
 
 
     def hamming_encode(self, data: str) -> str:
@@ -192,7 +192,7 @@ class WindTurbineNode:
             encoded_bits.append(self.hamming_encode(f"{bottomhalf:04b}"))
 
         encoded_message = []
-        current_byte:str = ""
+        current_byte = ""
         for bit_group in encoded_bits:
             current_byte += bit_group
             while len(current_byte) >= 8:
@@ -218,32 +218,33 @@ class WindTurbineNode:
         f = 30e9 # GHz
         C = 3e8 # m/s^2
         Pt = 50 # Watts
+        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))*2
         Pt = 10*math.log10(Pt) + 30
-        L = 20*math.log10(self.distance*1000*f*4*math.pi/C)
-        Pr = 10**(-L/10)*Pt
         Pr = 10*math.log10(Pr) + 30
-        print(f"Attenuation {L:0.2f}dB")
         print(f"Transmitting power {Pt:0.2f}dBm, Received power {Pr:0.2f}dBm")
         T = 290 # Kelvin
         k = 1.38e-23 # Boltzmann constant
-        B = 10e6 # 10MHz
-        N = 10*math.log10(T*k*B) + 30
-        print(f"Noise due to temperature: {N:0.4f}dBm")
-        SNR = Pr / N
-        print(f"SNR: {SNR:0.4f}")
-        q0 = 0.1587 # 1/2 erfc(1/sqrt(2))
-        qc = 4.1327 # sqrt(2*e*pi)
-        BER = (q0 - (SNR-1)/qc + (SNR-1)**2/(2*qc)) / 100
-        print(f"BER: {BER:0.4f}")
+        B = 2e9 # 2000MHz (Starlink)
+        Nt = 10*math.log10(T*k*B) + 30
+        print(f"Noise due to temperature: {Nt:0.2f}dBm")
+        sigma = random.uniform(1e-8, 5e-8) # Average atmospheric conditions
+        Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
+        print(f"Noise due to transit time: {Nphi:0.2f}dBm")
+        SNR = Pr - Nt - Nphi
+        print(f"SNR: {SNR:0.2f}")
+        BER = 0.5*math.erfc(SNR/math.sqrt(2))
+        print(f"BER: {BER:0.2e}")
 
         bits = "".join([f"{byte:08b}" for byte in data])
         flipped_bits = []
-        for i, bit in enumerate(bits):
+        tally = 0
+        for bit in bits:
             if random.random() < BER:
                 bit = '1' if bit == '0' else '0' # Flip the bit
-                print(f"flipped bit {i}")
+                tally += 1
             flipped_bits.append(bit)
         flipped_data = bytes(int("".join(flipped_bits[i:i+8]), base=2) for i in range(0, len(flipped_bits), 8))
+        print(f"flipped {tally} bits")
 
         return flipped_data
 
@@ -252,7 +253,7 @@ class WindTurbineNode:
         """Send turbine status to the closest available satellite using HTTP"""
         self.update_nearest_satellite()
         if self.next_satellite is None:
-            print("No satellites online. No message sent...")
+            print("No path to ground station can be made. No message sent...")
             return
         turbine_data = self.generate_turbine_data()
 
@@ -271,7 +272,7 @@ class WindTurbineNode:
 
             response = requests.post(url, headers=headers, data=noisy_data, verify=False, timeout=1, proxies={"http": None, "https": None})
             
-            print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
+            print("\033[92mStatus Update Sent:\033[0m", turbine_data.keys(), "to", self.next_satellite)
 
             time.sleep(self.simulate_leo_delay())
             print(response.headers)
@@ -285,7 +286,6 @@ class WindTurbineNode:
                 del self.routing_table[int(self.shortest_path[1])]
                 print(f"Removed satellite {self.shortest_path[1]} from routing table")
             self.send_status_update()
-
 
 
     def start_flask_app(self):
