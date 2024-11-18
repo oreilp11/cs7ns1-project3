@@ -266,16 +266,23 @@ class WindTurbineNode:
         # Send HTTP POST request to the next satellite
         url = f"http://{self.next_satellite[0]}:{self.next_satellite[1]}/"
         try:
-            response = requests.post(url, headers=headers, data=noisy_data, verify=False, proxies={"http": None, "https": None})
+
+            response = requests.post(url, headers=headers, data=message_content, verify=False,timeout=1, proxies={"http": None, "https": None})
+            
             print("\033[92mStatus Update Sent:\033[0m", turbine_data, "to", self.next_satellite)
-            print("\033[92mEncrypted Message Sent:\033[0m", encrypted_data, "to", self.next_satellite)
-            print("\033[92mEncoded Message Sent:\033[0m", error_correct_data, "to", self.next_satellite)
-            print("\033[92mNoisy Message Sent:\033[0m", noisy_data, "to", self.next_satellite)
+
             time.sleep(self.simulate_leo_delay())
             print(response.headers)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
         except Exception as e:
             print(f"Error sending status update: {e}")
+            # remove satellite from routing table, it's down
+            network_manager.send_down_device(self.routing_table, self.shortest_path[1],self.wf_id)
+            if self.shortest_path[1] in self.routing_table:
+                del self.routing_table[int(self.shortest_path[1])]
+                print(f"Removed satellite {self.shortest_path[1]} from routing table")
+            self.send_status_update()
+
 
 
     def start_flask_app(self):
@@ -300,5 +307,3 @@ if __name__ == "__main__":
 
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
-    finally:
-        network_manager.send_down_device(turbine.routing_table, turbine.wf_id)
