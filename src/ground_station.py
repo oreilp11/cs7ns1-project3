@@ -13,7 +13,7 @@ class GroundStationNode:
     def __init__(self):
         self.name = "Ground Station"
         self.gs_id = -1  # ground station always has ID -1
-        self.gs_host = ('0.0.0.0', 33999)  # ground station always uses port 32999
+        self.gs_host = ('0.0.0.0', 33999)  # ground station always uses port 33999
 
         # Get position from static positions
         positions = update_satellite_positions.read_static_positions()
@@ -49,9 +49,6 @@ class GroundStationNode:
                 "device-type": 2,
                 "device-id": self.gs_id,
                 "group-id": 8,
-                "latitude": self.latitude,
-                "longitude": self.longitude,
-                "altitude": self.altitude
             })
 
         @self.app.route('/', methods=['POST'])
@@ -154,12 +151,11 @@ class GroundStationNode:
         c1 = p1 ^ d1 ^ d2 ^ d4  # Syndrome bit 1
         c2 = p2 ^ d1 ^ d3 ^ d4  # Syndrome bit 2
         c3 = p3 ^ d2 ^ d3 ^ d4  # Syndrome bit 3
-        error_position = c1 * 1 + c2 * 2 + c3 * 4
+        err_pos = c1 * 1 + c2 * 2 + c3 * 4
 
         corrected = list(encoded)
-        if error_position != 0:  # If there is an error
-            error_index = error_position - 1
-            corrected[error_index] = '1' if corrected[error_index] == '0' else '0'
+        if err_pos != 0:  # If there is an error
+            corrected[err_pos-1] = '1' if corrected[err_pos-1] == '0' else '0'
 
         # Extract original data bits
         d1, d2, d3, d4 = corrected[2], corrected[4], corrected[5], corrected[6]

@@ -48,9 +48,6 @@ class WindTurbineNode:
                 "device-type": 0,
                 "device-id": self.wf_id,
                 "group-id": 8,
-                "latitude": self.latitude,
-                "longitude": self.longitude,
-                "altitude": self.altitude
             })
 
         @self.app.route('/down', methods=['GET'])
