@@ -108,7 +108,10 @@ optional fields are permitted
 
 #### Wind Turbine to Satellite
 
-Wind turbines generate status updates and send them to the nearest satellite using HTTP GET requests. The headers include custom Bobb headers for protocol information.
+Wind turbines generate status updates and send them to the nearest satellite using HTTP GET requests. The headers include information such as:
+- Group ID
+- Destination IP
+- Destination Port
 
 #### Satellite to Ground Station
 
