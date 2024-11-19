@@ -4,6 +4,7 @@ import random
 import requests
 import os
 import math
+import queue
 
 from flask import Flask, request, jsonify
 from find_shortest_way import find_shortest_path
@@ -21,6 +22,7 @@ class WindTurbineNode:
         self.wf_host = ('0.0.0.0', 33000)  # wind farm always uses port 33000
         self.gs_id = -1  # ground station always has ID -1
         self.num_turbines = 30
+        self.queue = queue.Queue()
 
         # Initialize routing table
         self.routing_table = network_manager.scan_network(device_id=self.wf_id, device_port=self.wf_host[1])
@@ -99,8 +101,8 @@ class WindTurbineNode:
                         "wind_speed": round(max(0, weather_data['wind_speed'] + random.uniform(-0.3, 0.3)), 2),
                         "pressure": round(max(0, weather_data['pressure'] + random.uniform(-50, 50)), 2),
                         "power_output": round(self.turbine.estimate_power_output(
-                            round(weather_data['temperature'] + random.uniform(-0.5, 0.5), 2),
-                            round(max(0, weather_data['wind_speed'] + random.uniform(-0.3, 0.3)), 2),
+                            round(weather_data['wind_speed'] + random.uniform(-0.3, 0.3), 2),
+                            round(max(0, weather_data['temperature'] + random.uniform(-0.3, 0.3)), 2),
                             round(max(0, weather_data['pressure'] + random.uniform(-50, 50)), 2)
                             ), 2)
                     } for i in range(self.num_turbines)
@@ -212,36 +214,25 @@ class WindTurbineNode:
 
 
     def simulate_noise(self, data: bytes) -> bytes:
-        """Simulate LEO transmission delay with jitter"""
-        """Simulate LEO transmission delay with jitter"""
-        C = 299_792_458 / 1000.0*1000.0  # kilometres per millisecond
-        base_delay = self.distance / C # milliseconds
-        jitter = random.uniform(2, 8) # milliseconds
-        leo_delay = (base_delay + jitter) / 1000 # seconds
-        print(f"Adding {leo_delay:0.4f}s delay")
-        return leo_delay
-
-
-    def simulate_noise(self, data: bytes) -> bytes:
-        """Simulate LEO transmission delay with jitter"""
-        f = 2.4e8 # 2.4GHz
-        C = 3e8 # m/s^2
-        Pt = 75 # Watts
-        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))**2
-        Pt = 10*math.log10(Pt) + 30
-        Pr = 10*math.log10(Pr) + 30
+        f = 2.4e8 # frequency (2.4GHz)
+        C = 3e8 # speed of light [m/s^2]
+        Pt = 50 # transmit power [50W used by Starlink to overcome high attenuation wrt distance]
+        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))**2 # receiver power using FSPL model
+        Pt = 10*math.log10(Pt) + 30 # convert to dBm
+        Pr = 10*math.log10(Pr) + 30 # convert to dBm
         print(f"Transmitting power {Pt:0.2f}dBm, Received power {Pr:0.2f}dBm")
         T = 290 # Kelvin
         k = 1.38e-23 # Boltzmann constant
         B = 10e6 # 10MHz
-        Nt = 10*math.log10(T*k*B) + 30
+        Nt = 10*math.log10(T*k*B) + 30 # AWGN for ambient temperature at receiver
         print(f"Noise due to temperature: {Nt:0.2f}dBm")
-        sigma = random.uniform(1e-9, 2e-8) # Average atmospheric conditions
-        Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
+        # Coeficient for transit time noise, influenced by atmospheric conditions
+        sigma = random.uniform(1e-9, 1e-8) # Excellent to Average atmospheric conditions
+        Nphi = 10*math.log10(1+(2*math.pi*f*sigma)) # Transit time noise
         print(f"Noise due to transit time: {Nphi:0.2f}dBm")
-        SNR = Pr - (Nt + Nphi)
+        SNR = Pr - (Nt + Nphi) # Signal to Noise Ratio (dBm calculation form)
         print(f"SNR: {SNR:0.2f}")
-        BER = 0.5*math.erfc(SNR/math.sqrt(2))
+        BER = 0.5*math.erfc(SNR/math.sqrt(2)) # Bit Error Rate, formula valid for BPKS/QPKS modulation
         print(f"BER: {BER:0.2e}")
 
         bits = "".join([f"{byte:08b}" for byte in data])
@@ -258,13 +249,23 @@ class WindTurbineNode:
         return flipped_data
 
 
-    def send_status_update(self):
+    def send_status_update(self, generate=True):
         """Send turbine status to the closest available satellite using HTTP"""
+        
+        if generate:
+            turbine_data = self.generate_turbine_data()
+        elif self.queue.empty():
+            print("Queue Cleared")
+            return
+        else:
+            turbine_data = self.queue.get()
+        print(f"Messages in queue: {self.queue.qsize()}")
+        
         self.update_nearest_satellite()
         if self.next_satellite is None:
-            print("No path to ground station can be made. No message sent...")
+            print("No path to ground station can be made. No message sent. Adding to Queue...")
+            self.queue.put(turbine_data)
             return
-        turbine_data = self.generate_turbine_data()
 
         encrypted_data = self.encrypt_turbine_data(turbine_data)
         error_correct_data = self.hamming_encode_message(encrypted_data)
@@ -298,7 +299,11 @@ class WindTurbineNode:
             if self.shortest_path[1] in self.routing_table:
                 del self.routing_table[int(self.shortest_path[1])]
                 print(f"Removed satellite {self.shortest_path[1]} from routing table")
-            self.send_status_update()
+            self.queue.put(turbine_data)
+            self.send_status_update(generate=False)
+
+        if not self.queue.empty():
+            self.send_status_update(generate=False)
 
 
     def start_flask_app(self):

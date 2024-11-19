@@ -8,6 +8,8 @@ import csv
 from flask import Flask, request, jsonify
 import update_satellite_positions
 import network_manager
+from wind_turbine_calculator import WindTurbineCalculator
+
 
 class GroundStationNode:
     def __init__(self):
@@ -21,6 +23,7 @@ class GroundStationNode:
         self.longitude = positions[0]['long']
         self.altitude = positions[0]['alt']
 
+        self.turbine_calc = WindTurbineCalculator()
         self.private_key = self.load_key(private=True)
 
         # # Announce presence to network
@@ -66,32 +69,35 @@ class GroundStationNode:
                 print("Decryption failed or message is corrupted")
                 return jsonify({"message":"Decryption failed or message is corrupted"})
 
-            # Write data to CSV file
-            self.store_data_to_csv(data)
-
             end_to_end_delay = time.time() - data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
             print(f"Data received at Ground Station")
             print(f"\033[92mData: {data}\033[0m")
 
+             # Write data to CSV file
+            self.store_data_to_csv(data)
+
             # Define threshold values
             thresholds = {
-                "power_output": (5000.0, 6000.0)
+                "power_output": 200
             }
 
             # Check if any parameter exceeds the threshold
             alerts = {}
-            for turbine, vars in data['turbines'].items():
-                for param, threshold in thresholds.items():
-                    if param in vars and (vars[param] < threshold[0] or vars[param] > threshold[1]):
-                        alerts[turbine] = f"[{param}] {vars[param]} exceeds threshold {threshold}"
+            for turbine in data['turbines']:
+                d = data['turbines'][turbine]
+                estimated_power = round(self.turbine_calc.estimate_power_output(d['wind_speed'], d['temperature'], d['pressure']), 2)
+                actual_power = d['power_output'] 
+                if abs(estimated_power-actual_power)>thresholds['power_output']:
+                    alerts[turbine] = f"Expected {estimated_power}kW from local weather variables but received {actual_power}kW"
 
             # Return the appropriate response based on checks
             if not alerts:
-                print(f'"message": "OK - All parameters within safe thresholds"')
+                print('"message": "OK - All parameters within safe thresholds"')
             else:
-                print(f'"message": "Alert - Parameters exceeded thresholds"')#, "alerts": {alerts}')
+                print(f'"message": "Alert - Parameters exceeded thresholds"\n"Alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
+
 
     def store_data_to_csv(self, data):
         """Store received data in a CSV file."""
@@ -109,6 +115,7 @@ class GroundStationNode:
                     'power_output': turbine_data['power_output']
                 }
                 writer.writerow(row)
+
 
     def decrypt_turbine_data(self, encrypted_message):
         try:
@@ -144,6 +151,7 @@ class GroundStationNode:
                 decoded_message.append(high_nibble | low_nibble)
 
         return bytes(decoded_message)
+
 
     def hamming_decode(str, encoded: str) -> str:
         """Decodes a byte message using Hamming (7,4) code and corrects errors where possible"""

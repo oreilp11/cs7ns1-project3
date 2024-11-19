@@ -1,11 +1,11 @@
 class WindTurbineCalculator:
     def __init__(self):
-        # Enercon E-126 specifications
-        self.rated_power = 7500.0  # Rated power in kW
-        self.cut_in_speed = 3.0    # Cut-in wind speed in m/s
-        self.rated_speed = 14.0    # Rated wind speed in m/s
+        # Siewind SWT-6.0-154 specifications
+        self.rated_power = 6000.0  # Rated power in kW
+        self.cut_in_speed = 4.0    # Cut-in wind speed in m/s
+        self.rated_speed = 13.0    # Rated wind speed in m/s
         self.cut_out_speed = 25.0  # Cut-out wind speed in m/s
-        self.hub_height = 135      # Hub height in meters
+        self.hub_height = 135      # Hub height in meters (site specific - estimated)
 
     def calculate_air_density(self, temperature_celsius, pressure_pascal):
         """Calculate air density using temperature and pressure"""

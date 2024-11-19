@@ -5,27 +5,20 @@ from math import radians, cos, sin, asin, sqrt, pi, erfc
 
 def calculate_link_quality(distance, is_ground_transmission=False):
     # Constants (using reasonable approximations)
-    f = 30e9  # frequency (30 GHz) [Ka band used by Starlink]
-    c = 3e8    # speed of light
-    Pt = 50   # transmit power (50W) [50W used by Starlink to overcome high attenuation wrt distance]
-    T = 290    # temperature (K) [Average temperature in thermosphere (85km - 690km) at LEO orbit (approx 550km) is roughly 290K]
-    k = 1.38e-23  # Boltzmann constant
-    B = 10e6   # bandwidth (10 MHz) [large bandwith used by Starlink for high speed internet]
-
-    f = 2.4e8 # 2.4GHz
-    C = 3e8 # m/s^2
-    Pt = 75 # Watts
-    Pr = Pt * (C/(4 * math.pi * distance * 1000 * f))**2
+    f = 2.4e8 # frequency (2.4GHz)
+    C = 3e8 # speed of light [m/s^2]
+    Pt = 50 # transmit power [50W used by Starlink to overcome high attenuation wrt distance]
+    Pr = Pt * (C/(4 * math.pi * distance * 1000 * f))**2 # receiver power using FSPL model
     Pt = 10*math.log10(Pt) + 30
     Pr = 10*math.log10(Pr) + 30
-    T = 290 # Kelvin
+    T = 290 # temperature (K) [Average temperature in thermosphere (85km - 690km) at LEO orbit (approx 550km) is roughly 290K]
     k = 1.38e-23 # Boltzmann constant
-    B = 10e6 # 10MHz
-    Nt = 10*math.log10(T*k*B) + 30
-    sigma = 1e-8 if is_ground_transmission else 1e-9
-    Nphi = 10*math.log10(1+(2*math.pi*f*sigma))
-    SNR = Pr - (Nt + Nphi)
-    quality = 2 / max(math.erfc(SNR/math.sqrt(2)), 1e-100)
+    B = 10e6 # bandwidth (10 MHz)
+    Nt = 10*math.log10(T*k*B) + 30 # AWGN for ambient temperature at receiver
+    sigma = 1e-8 if is_ground_transmission else 1e-9 # Coeficient for transit time noise, influenced by atmospheric conditions
+    Nphi = 10*math.log10(1+(2*math.pi*f*sigma)) # Transit time noise
+    SNR = Pr - (Nt + Nphi) # Signal to Noise Ratio
+    quality = 2 / max(math.erfc(SNR/math.sqrt(2)), 1e-100) # Inverse of Bit Error Rate, formula valid for BPKS/QPKS modulation
 
     return quality
 
@@ -77,7 +70,8 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
 
                 if can_connect:
                     # Calculate link quality and use it to modify the weight
-                    link_quality = calculate_link_quality(distance)
+                    is_ground_transmission = dev1 in ['-1', '0'] or dev2 in ['-1', '0']
+                    link_quality = calculate_link_quality(distance, is_ground_transmission)
                     # Weight is now a combination of distance and signal quality
                     # We use distance/link_quality so that:
                     # - Higher distances increase the weight
@@ -96,7 +90,6 @@ def find_shortest_path(positions_list, start_node, end_node, broken_devices=None
             continue
         path = path + [node]
         if node == str(end_node):
-            print(f"Minimum weight: {cost:0.3f} km / quality")
             print("Path:", " -> ".join(path))
             dist = haversine_alt_dist(positions[path[0]], positions[path[1]])
             return [int(node) for node in path], dist
