@@ -324,6 +324,7 @@ if __name__ == "__main__":
 
         while True:
             turbine.send_status_update()
+            turbine.routing_table = network_manager.scan_network(device_id=turbine.wf_id, device_port=turbine.wf_host[1])
             time.sleep(5)
 
     except KeyboardInterrupt:

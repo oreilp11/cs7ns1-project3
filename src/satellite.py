@@ -180,7 +180,7 @@ if __name__ == "__main__":
         satellite.start_flask_app()
         print(f"Satellite {sat_id} Online.")
         while True:
-            # satellite.update_nearest_satellite()
+            satellite.routing_table = network_manager.scan_network(device_id=satellite.sat_id,device_port=satellite.sat_host[1])
             time.sleep(5)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
