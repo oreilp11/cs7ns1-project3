@@ -1,4 +1,4 @@
-# Written by Emile Delmas, Paul O'Reilly & Arnav Tripathy
+# Written by Paul O'Reilly & Arnav Tripathy
 import time
 import json
 import rsa
@@ -79,11 +79,6 @@ class GroundStationNode:
 
             # Check if any parameter exceeds the threshold
             alerts = {}
-            for turbine in data['turbines']:
-                d = data['turbines'][turbine]
-                estimated_power = round(self.turbine_calc.estimate_power_output(d['wind_speed'], d['temperature'], d['pressure']), 2)
-                actual_power = d['power_output']
-                if abs(estimated_power-actual_power)>thresholds['power_output']:
             for turbine, turbine_data in decrypted_data['turbines'].items():
                 estimated_power = round(self.turbine_calc.estimate_power_output(turbine_data['wind_speed'], turbine_data['temperature'], turbine_data['pressure']), 2)
                 actual_power = turbine_data['power_output']

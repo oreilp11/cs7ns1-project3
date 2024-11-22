@@ -21,7 +21,7 @@ pids+=($!)
 # Start ground station
 python src/ground_station.py &
 pids+=($!)
-sleep 1é
+sleep 1
 
 # Start satellites from 1 to 10
 for i in {1..10}
