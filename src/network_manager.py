@@ -1,3 +1,4 @@
+# Written by Emile Delmas & Daya Lokesh Duddupudi
 import requests
 from typing import Dict, Tuple, List
 import time
@@ -16,20 +17,6 @@ def read_ips() -> List[str]:
     except FileNotFoundError:
         print(f"Warning: {filename} not found. Using localhost.")
         return ['0.0.0.0']
-
-def read_wf_and_gs() ->  Dict[int, Tuple[str, int]]:
-    """Read windfarm and ground station from file"""
-    try:
-        # filename is in assets, wf_gs.txt
-        filename = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "wf_gs.txt")
-        with open(filename, 'r') as f:
-            lines = f.readlines()
-            if not lines:
-                return {}
-            return {int(line.split()[0]): (line.split()[1], int(line.split()[2])) for line in lines}
-    except FileNotFoundError:
-        print(f"Warning: {filename} not found. Using empty dictionary.")
-        return {}
 
 def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
   """Read other network satellites from file"""

@@ -1,3 +1,4 @@
+// Written by Emile Delmas
 // Initialize map
 const map = L.map('map').setView([53, -17], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

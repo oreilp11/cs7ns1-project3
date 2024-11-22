@@ -1,3 +1,4 @@
+# Written by Emile Delmas, Paul O'Reilly & Daya Lokesh Duddupudi
 class WindTurbineCalculator:
     def __init__(self):
         # Siewind SWT-6.0-154 specifications
@@ -52,6 +53,9 @@ class WindTurbineCalculator:
 
         # Get power output from the power curve
         power = self.power_curve(wind_speed)
+
+        # convert from mechanical power to electrical power
+        power = power * 0.95
 
         # Adjust power for air density
         return power * air_density_ratio

@@ -1,9 +1,10 @@
+# Written by Emile Delmas & Arnav Tripathy
 from flask import Flask, render_template, jsonify
 import update_satellite_positions
 from find_shortest_way import find_shortest_path
 import csv
 import os
-from wind_farm import WindTurbineNode
+
 
 base_path = os.path.dirname(os.path.dirname(__file__))
 static_path = os.path.join(base_path, 'static')

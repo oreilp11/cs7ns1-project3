@@ -1,3 +1,4 @@
+# Written by Emile Delmas, Paul O'Reilly & Arnav Tripathy
 import random
 import time
 import threading

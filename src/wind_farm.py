@@ -1,3 +1,4 @@
+# Written by Emile Delmas, Paul O'Reilly, Arnav Tripathy & Daya Lokesh Duddupudi
 import time
 import json
 import random
@@ -251,7 +252,7 @@ class WindTurbineNode:
 
     def send_status_update(self, generate=True):
         """Send turbine status to the closest available satellite using HTTP"""
-        
+
         if generate:
             turbine_data = self.generate_turbine_data()
         elif self.queue.empty():
@@ -260,7 +261,7 @@ class WindTurbineNode:
         else:
             turbine_data = self.queue.get()
         print(f"Messages in queue: {self.queue.qsize()}")
-        
+
         self.update_nearest_satellite()
         if self.next_satellite is None or self.gs_id not in self.routing_table:
             print("No path to ground station can be made. No message sent. Adding to Queue...")
@@ -317,7 +318,7 @@ if __name__ == "__main__":
         turbine = WindTurbineNode()
         turbine.start_flask_app()
 
-        input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")
+        # input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")
 
         while True:
             for _ in range(12):
