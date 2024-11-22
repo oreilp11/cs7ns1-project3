@@ -59,10 +59,8 @@ class Satellite:
         def receive_data():
             headers = request.headers
             data = request.data
-            print(f"Data received at Satellite {self.sat_id} : {data}")
-
-            # Forward data to the next device
-            threading.Thread(target=self.forward_data, args=(headers,data)).start()
+            print(f"Data received at Satellite {self.sat_id} : {data[:24]}")
+            threading.Thread(target=self.forward_data, args=(headers, data)).start()
             return jsonify({"message": f"Satellite {self.sat_id} received data"})
 
         print(f"{self.name} listening on {self.sat_host}")
@@ -94,46 +92,123 @@ class Satellite:
         return leo_delay
 
 
-    def simulate_noise(self, data):
-        f = 30*10e9 # GHz
-        C = 299_792_458 # m/s^2
-        Pt = 50 # Watts
-        Pt = 10*math.log10(Pt) + 30
-        L = 20*math.log10(self.distance) + 20*math.log10(f*4*math.pi/C)
-        Pr = 10**(-L/10)*Pt
-        Pr = 10*math.log10(Pr) + 30
-        print(f"Attenuation {L:0.2f}dB")
+    def simulate_noise(self, data: bytes) -> bytes:
+        f = 2.4e8 # frequency (2.4GHz)
+        C = 3e8 # speed of light [m/s^2]
+        Pt = 50 # transmit power [50W used by Starlink to overcome high attenuation wrt distance]
+        Pr = Pt * (C/(4 * math.pi * self.distance * 1000 * f))**2 # receiver power using FSPL model
+        Pt = 10*math.log10(Pt) + 30 # convert to dBm
+        Pr = 10*math.log10(Pr) + 30 # convert to dBm
         print(f"Transmitting power {Pt:0.2f}dBm, Received power {Pr:0.2f}dBm")
-        T = 300 # Kelvin
-        k = 1.380_649e-23 # Boltzmann constant
-        B = 1*10**9 # GHz
-        N = 10*math.log10(T*k*B) + 30
-        print(f"Noise due to temperature: {N}")
-        SNR = Pr/(N)
-        print(f"SNR: {SNR:0.4f}")
-        BER = 0.5*math.erfc(math.sqrt(SNR))/100
-        print(f"BER: {BER:0.4f}")
+        T = 290 # Kelvin
+        k = 1.38e-23 # Boltzmann constant
+        B = 10e6 # 10MHz
+        Nt = 10*math.log10(T*k*B) + 30 # AWGN for ambient temperature at receiver
+        print(f"Noise due to temperature: {Nt:0.2f}dBm")
+        # Coeficient for transit time noise, influenced by atmospheric conditions
+        sigma = 1e-9 # Excellent conditions in space
+        Nphi = 10*math.log10(1+(2*math.pi*f*sigma)) # Transit time noise
+        print(f"Noise due to transit time: {Nphi:0.2f}dBm")
+        SNR = Pr - (Nt + Nphi) # Signal to Noise Ratio (dBm calculation form)
+        print(f"SNR: {SNR:0.2f}")
+        BER = 0.5*math.erfc(SNR/math.sqrt(2)) # Bit Error Rate, formula valid for BPKS/QPKS modulation
+        print(f"BER: {BER:0.2e}")
 
         bits = "".join([f"{byte:08b}" for byte in data])
         flipped_bits = []
+        tally = 0
         for bit in bits:
             if random.random() < BER:
-                bit = '1' if bit == '0' else '0'
+                bit = '1' if bit == '0' else '0' # Flip the bit
+                tally += 1
             flipped_bits.append(bit)
-
-        flipped_data = bytes(int("".join(flipped_bits[i:i+8]), base=2) for i in range(len(flipped_bits), 8) if len("".join(flipped_bits[i:i+8]))>0)
+        flipped_data = bytes(int("".join(flipped_bits[i:i+8]), base=2) for i in range(0, len(flipped_bits), 8))
+        print(f"flipped {tally} bits")
 
         return flipped_data
 
 
+    def hamming_decode_message(self, encoded_data: bytes) -> bytes:
+        decoded_nibbles = []
+
+        # Convert bytes into bit strings
+        bit_string = ''.join(f"{byte:08b}" for byte in encoded_data)
+
+        # Process each 7-bit block
+        for i in range(0, len(bit_string), 7):
+            block = bit_string[i:i+7].ljust(7, '0')  # Ensure block is 7 bits
+            decoded_nibble = self.hamming_decode(block)
+            decoded_nibbles.append(decoded_nibble)
+
+        # Combine decoded nibbles into bytes
+        decoded_message = []
+        for i in range(0, len(decoded_nibbles), 2):
+            if i + 1 < len(decoded_nibbles):
+                high_nibble = int(decoded_nibbles[i], 2) << 4
+                low_nibble = int(decoded_nibbles[i + 1], 2)
+                decoded_message.append(high_nibble | low_nibble)
+
+        return bytes(decoded_message)
+
+
+    def hamming_decode(str, encoded: str) -> str:
+        """Decodes a byte message using Hamming (7,4) code and corrects errors where possible"""
+        p1, p2, d1, p3, d2, d3, d4 = map(int, encoded)
+        c1 = p1 ^ d1 ^ d2 ^ d4  # Syndrome bit 1
+        c2 = p2 ^ d1 ^ d3 ^ d4  # Syndrome bit 2
+        c3 = p3 ^ d2 ^ d3 ^ d4  # Syndrome bit 3
+        err_pos = c1 * 1 + c2 * 2 + c3 * 4
+
+        corrected = list(encoded)
+        if err_pos != 0:  # If there is an error
+            corrected[err_pos-1] = '1' if corrected[err_pos-1] == '0' else '0'
+
+        # Extract original data bits
+        d1, d2, d3, d4 = corrected[2], corrected[4], corrected[5], corrected[6]
+        return f"{d1}{d2}{d3}{d4}"
+
+
+    def hamming_encode(self, data: str) -> str:
+        """Encodes a 4-bit binary string using Hamming (7,4) code."""
+        d1, d2, d3, d4 = map(int, data)
+        p1 = d1 ^ d2 ^ d4  # Parity 1
+        p2 = d1 ^ d3 ^ d4  # Parity 2
+        p3 = d2 ^ d3 ^ d4  # Parity 3
+        return f"{p1}{p2}{d1}{p3}{d2}{d3}{d4}"
+
+
+    def hamming_encode_message(self, data: bytes) -> bytes:
+        """Encodes a byte message using Hamming (7,4) code."""
+        encoded_bits = []
+        for byte in data:
+            tophalf = (byte >> 4) & 0xF  # Upper 4 bits
+            encoded_bits.append(self.hamming_encode(f"{tophalf:04b}"))
+            bottomhalf = byte & 0xF      # Lower 4 bits
+            encoded_bits.append(self.hamming_encode(f"{bottomhalf:04b}"))
+
+        encoded_message = []
+        current_byte = ""
+        for bit_group in encoded_bits:
+            current_byte += bit_group
+            while len(current_byte) >= 8:
+                encoded_message.append(int(current_byte[:8], 2))
+                current_byte = current_byte[8:]
+        if current_byte:
+            encoded_message.append(int(current_byte.ljust(8, "0"), 2))
+        return bytes(encoded_message)
+
+
     def forward_data(self, headers, data):
-        #data = self.simulate_noise(data)
 
         if 'X-Destination-ID' in headers:
             print(f"\n-----\nDestination ID: {headers['X-Destination-ID']}\n-----\n")
 
         if headers['X-Group-ID'] == '8':
             self.update_nearest_satellite()
+            # decoded_data = self.hamming_decode_message(data)
+            # # check if message is corrupt (maybe implement AES if time)
+            # encoded_data = self.hamming_encode_message(decoded_data)
+            # data = self.simulate_noise(encoded_data)
         else:
             self.next_device = headers['X-Destination-IP'], headers['X-Destination-Port']
 
@@ -151,7 +226,7 @@ class Satellite:
             print(f"Forwarded data to {next_ip}:{next_port}, response: {response.status_code}")
         except Exception as e:
             print(f"Error forwarding data: {e}")
-            network_manager.send_down_device(self.routing_table, self.shortest_path[1],self.sat_id)
+            network_manager.send_down_device(self.routing_table, self.shortest_path[1], self.sat_id)
             if self.shortest_path[1] in self.routing_table:
                 del self.routing_table[int(self.shortest_path[1])]
                 print(f"Removed satellite {self.shortest_path[1]} from routing table")
@@ -180,8 +255,12 @@ if __name__ == "__main__":
         satellite.start_flask_app()
         print(f"Satellite {sat_id} Online.")
         while True:
-            satellite.routing_table = network_manager.scan_network(device_id=satellite.sat_id,device_port=satellite.sat_host[1])
-            time.sleep(5)
+            network_manager.scan_network(
+                device_id=satellite.sat_id, 
+                device_port=satellite.sat_host[1], 
+                exclude_list={f"{ip}:{port}" for ip, port in satellite.routing_table.values()}
+            )
+            time.sleep(60)
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)
 

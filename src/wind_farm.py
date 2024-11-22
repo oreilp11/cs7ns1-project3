@@ -30,7 +30,7 @@ class WindTurbineNode:
         print(f"Routing table for {self.name}: {self.routing_table}")
 
         self.turbine = WindTurbineCalculator()
-        self.public_key = self.load_key()
+        self.public_key = self.load_rsa_key()
 
         positions = update_satellite_positions.read_static_positions()
         self.latitude = positions[1]['lat']
@@ -130,7 +130,7 @@ class WindTurbineNode:
             return data
 
 
-    def load_key(self, private=False):
+    def load_rsa_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
 
         if private:
@@ -163,7 +163,7 @@ class WindTurbineNode:
             self.distance = None
 
 
-    def encrypt_turbine_data(self, message: dict) -> bytes:
+    def encrypt_rsa_turbine_data(self, message: dict) -> bytes:
         ### need to start splitting the message up into chunks if message size > 245 bytes
         text = json.dumps(message)
         utf8_text = text.encode("utf-8")
@@ -262,12 +262,12 @@ class WindTurbineNode:
         print(f"Messages in queue: {self.queue.qsize()}")
         
         self.update_nearest_satellite()
-        if self.next_satellite is None:
+        if self.next_satellite is None or self.gs_id not in self.routing_table:
             print("No path to ground station can be made. No message sent. Adding to Queue...")
             self.queue.put(turbine_data)
             return
 
-        encrypted_data = self.encrypt_turbine_data(turbine_data)
+        encrypted_data = self.encrypt_rsa_turbine_data(turbine_data)
         error_correct_data = self.hamming_encode_message(encrypted_data)
         noisy_data = self.simulate_noise(error_correct_data)
 
@@ -285,11 +285,8 @@ class WindTurbineNode:
         try:
             time.sleep(self.simulate_leo_delay())
             response = requests.post(url, headers=headers, data=noisy_data, verify=False, timeout=1, proxies={"http": None, "https": None})
-
             print("\033[92mStatus Update Sent:\033[0m", turbine_data.keys(), "to", self.next_satellite)
-
             time.sleep(self.simulate_leo_delay())
-            print(response.headers)
             print("\033[91mResponse Received:\033[0m", response.status_code, response.text)
 
         except Exception as e:
@@ -323,9 +320,14 @@ if __name__ == "__main__":
         input("\n"+"-"*30+"\nWind Turbine Online. Press any key to start...\n"+"-"*30+"\n\n")
 
         while True:
-            turbine.send_status_update()
-            turbine.routing_table = network_manager.scan_network(device_id=turbine.wf_id, device_port=turbine.wf_host[1])
-            time.sleep(5)
+            for _ in range(12):
+                turbine.send_status_update()
+                time.sleep(5)
+            network_manager.scan_network(
+                device_id=turbine.wf_id, 
+                device_port=turbine.wf_host[1],
+                exclude_list={f"{ip}:{port}" for ip, port in turbine.routing_table.values()}
+            )
 
     except KeyboardInterrupt:
         print("-"*30+"\nSimulation stopped by user\n"+"-"*30)

@@ -24,7 +24,7 @@ class GroundStationNode:
         self.altitude = positions[0]['alt']
 
         self.turbine_calc = WindTurbineCalculator()
-        self.private_key = self.load_key(private=True)
+        self.private_key = self.load_rsa_key(private=True)
 
         # # Announce presence to network
         network_manager.scan_network(device_id=self.gs_id, device_port=self.gs_host[1])
@@ -56,26 +56,21 @@ class GroundStationNode:
 
         @self.app.route('/', methods=['POST'])
         def receive_data():
-            data = request.data
-            data = self.hamming_decode_message(data)
-            if data is None:
-                print("Too many Errors, could not decode")
-                print(f"Message: {request.data}")
-                return jsonify({"message":"Too many Errors, could not decode"})
+            noisy_data = request.data
+            corrected_data = self.hamming_decode_message(noisy_data)
+            decrypted_data = self.decrypt_rsa_turbine_data(corrected_data)
 
-            data = self.decrypt_turbine_data(data)
-
-            if data is None:
+            if decrypted_data is None:
                 print("Decryption failed or message is corrupted")
                 return jsonify({"message":"Decryption failed or message is corrupted"})
 
-            end_to_end_delay = time.time() - data['timestamp']
+            end_to_end_delay = time.time() - decrypted_data['timestamp']
             print(f"End-to-end delay: {end_to_end_delay:.4f}s")
             print(f"Data received at Ground Station")
-            print(f"\033[92mData: {data}\033[0m")
+            print(f"\033[92mData: {decrypted_data.keys()}\033[0m")
 
              # Write data to CSV file
-            self.store_data_to_csv(data)
+            self.store_data_to_csv(decrypted_data)
 
             # Define threshold values
             thresholds = {
@@ -84,17 +79,14 @@ class GroundStationNode:
 
             # Check if any parameter exceeds the threshold
             alerts = {}
-            for turbine in data['turbines']:
-                d = data['turbines'][turbine]
-                estimated_power = round(self.turbine_calc.estimate_power_output(d['wind_speed'], d['temperature'], d['pressure']), 2)
-                actual_power = d['power_output'] 
-                if abs(estimated_power-actual_power)>thresholds['power_output']:
+            for turbine, turbine_data in decrypted_data['turbines'].items():
+                estimated_power = round(self.turbine_calc.estimate_power_output(turbine_data['wind_speed'], turbine_data['temperature'], turbine_data['pressure']), 2)
+                actual_power = turbine_data['power_output'] 
+                if abs(estimated_power-actual_power) > thresholds['power_output']:
                     alerts[turbine] = f"Expected {estimated_power}kW from local weather variables but received {actual_power}kW"
 
             # Return the appropriate response based on checks
-            if not alerts:
-                print('"message": "OK - All parameters within safe thresholds"')
-            else:
+            if alerts:
                 print(f'"message": "Alert - Parameters exceeded thresholds"\n"Alerts": {alerts}')
             return jsonify({"message": "Data received at Ground Station"})
 
@@ -117,7 +109,7 @@ class GroundStationNode:
                 writer.writerow(row)
 
 
-    def decrypt_turbine_data(self, encrypted_message):
+    def decrypt_rsa_turbine_data(self, encrypted_message):
         try:
             decrypted_message = []
             for i in range(0, len(encrypted_message), 256):
@@ -170,7 +162,7 @@ class GroundStationNode:
         return f"{d1}{d2}{d3}{d4}"
 
 
-    def load_key(self, private=False):
+    def load_rsa_key(self, private=False):
         keypath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "keys")
 
         if private:

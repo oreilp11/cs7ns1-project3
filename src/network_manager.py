@@ -45,7 +45,7 @@ def read_other_network_satellites() -> Dict[int, Tuple[str, int]]:
     print(f"Warning: {filename} not found. Using empty dictionary.")
     return {}
 
-def scan_network(device_id, device_port, start_port: int = 33000, end_port: int = 33010) -> Dict[int, Tuple[str, int]]:
+def scan_network(device_id, device_port, start_port: int = 33000, end_port: int = 33010, exclude_list = None) -> Dict[int, Tuple[str, int]]:
   """
   Scan network for active devices on all IPs from ip.txt
   Returns a dictionary mapping device IDs to their (host, port) tuples
@@ -55,11 +55,15 @@ def scan_network(device_id, device_port, start_port: int = 33000, end_port: int 
   ips = read_ips()
 
   print(f"Scanning network for devices on ports {start_port}-{end_port}: {ips}")
+  print(f"{exclude_list = }")
 
   device_positions = update_satellite_positions.calculate_satellite_positions(range(1, 11))
   # add yourself to the routing table
   for ip in ips:
     for port in list(range(start_port, end_port + 1)) + [33999]:
+      if exclude_list is not None and f"{ip}:{port}" in exclude_list:
+        print(f"Skipping {ip}:{port}")
+        continue
       try:
         next_id = start_port - 33000
         delay = simulate_leo_delay(device_positions,device_id,next_id)
@@ -84,7 +88,6 @@ def simulate_leo_delay(device_positions,device_id,next_id) -> float:
     base_delay = distance / C # milliseconds
     jitter = random.uniform(2, 8) # milliseconds
     leo_delay = (base_delay + jitter) / 1000 # seconds
-    print(f"Adding {leo_delay:0.4f}s delay")
     return leo_delay
 
 def send_down_device(routing_table, device_id, source_id):
